@@ -14,7 +14,11 @@ from .protocol_models import Emotion, Gesture
 _RULES: list[tuple[re.Pattern[str], Gesture | None, Emotion | None]] = [
     (re.compile(r"\b(hi|hello|hey|welcome|good (morning|afternoon|evening))\b"), Gesture.wave, Emotion.happy),
     (re.compile(r"\b(bye|goodbye|see you|take care)\b"), Gesture.wave, Emotion.happy),
-    (re.compile(r"\b(congrat\w*|awesome|amazing|fantastic|well done|great job)\b"), Gesture.celebrate, Emotion.happy),
+    (
+        re.compile(r"\b(congrat\w*|awesome|amazing|fantastic|well done|great job)\b"),
+        Gesture.celebrate,
+        Emotion.happy,
+    ),
     (re.compile(r"\b(sorry|unfortunately|sad)\b"), None, Emotion.sad),
     (re.compile(r"\b(wow|really\?|no way|surpris\w*)\b"), None, Emotion.surprised),
     (re.compile(r"\b(hmm|let me think|good question|i wonder)\b"), Gesture.think, Emotion.thinking),

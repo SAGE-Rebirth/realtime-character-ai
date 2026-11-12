@@ -52,4 +52,6 @@ def check_gemini(s: Settings) -> bool:
 
 
 def _fail(problem: str, hint: str) -> None:
-    log.error("\n%s\nGEMINI CHECK FAILED: conversations will not work.\n%s\n%s\n%s", BANNER, problem, hint, BANNER)
+    log.error(
+        "\n%s\nGEMINI CHECK FAILED: conversations will not work.\n%s\n%s\n%s", BANNER, problem, hint, BANNER
+    )

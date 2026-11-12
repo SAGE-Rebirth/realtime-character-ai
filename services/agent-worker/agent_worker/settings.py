@@ -29,7 +29,9 @@ def load_settings() -> Settings:
     return Settings(
         # LIVE_MODEL_API_KEY wins over GEMINI_API_KEY, so a dedicated live key can sit in .env while an
         # older GEMINI_API_KEY is still exported in the shell.
-        gemini_api_key=(os.environ.get("LIVE_MODEL_API_KEY") or os.environ.get("GEMINI_API_KEY") or "").strip(),
+        gemini_api_key=(
+            os.environ.get("LIVE_MODEL_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
+        ).strip(),
         gemini_model=os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview"),
         # Live models answer on v1alpha for this key type; v1beta returns 404.
         gemini_api_version=os.environ.get("GEMINI_API_VERSION", "v1alpha"),
@@ -57,7 +59,9 @@ def livekit_proxy(livekit_url: str, env: dict[str, str] | None = None) -> str | 
     host = (urlparse(livekit_url).hostname or "").lower()
     if host in _LOOPBACK:
         return None
-    no_proxy = [h.strip().lower().lstrip(".") for h in (env.get("NO_PROXY") or env.get("no_proxy") or "").split(",")]
+    no_proxy = [
+        h.strip().lower().lstrip(".") for h in (env.get("NO_PROXY") or env.get("no_proxy") or "").split(",")
+    ]
     if any(h and (h == "*" or host == h or host.endswith("." + h)) for h in no_proxy):
         return None
     return env.get("HTTPS_PROXY") or env.get("https_proxy") or env.get("HTTP_PROXY") or env.get("http_proxy")

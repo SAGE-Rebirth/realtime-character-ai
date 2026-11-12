@@ -41,6 +41,10 @@ hard answer). Never mention the tool or describe your gestures out loud.
 
 def build_instructions(agent: AgentConfig, express_tool: bool = False) -> str:
     audience = agent.audience or AudienceProfile.general
-    parts = [PLATFORM_PREAMBLE, AUDIENCE_RULES[AudienceProfile(audience)], EXPRESSION_GUIDE if express_tool else ""]
+    parts = [
+        PLATFORM_PREAMBLE,
+        AUDIENCE_RULES[AudienceProfile(audience)],
+        EXPRESSION_GUIDE if express_tool else "",
+    ]
     parts.append(f"Your name is {agent.name}.\nPersona:\n{agent.instructions.strip()}")
     return "\n\n".join(p for p in parts if p)

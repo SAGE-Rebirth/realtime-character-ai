@@ -48,16 +48,22 @@ class EventPublisher:
         await self._send(AgentStateEvent(v=1, ts=_now_ms(), type="agent.state", state=s))
 
     async def emotion(self, emotion: Emotion, intensity: float = 0.7) -> None:
-        await self._send(EmotionEvent(v=1, ts=_now_ms(), type="agent.emotion", emotion=emotion, intensity=intensity))
+        await self._send(
+            EmotionEvent(v=1, ts=_now_ms(), type="agent.emotion", emotion=emotion, intensity=intensity)
+        )
 
     async def gesture(self, gesture: Gesture, intensity: float = 0.7) -> None:
-        await self._send(GestureEvent(v=1, ts=_now_ms(), type="agent.gesture", gesture=gesture, intensity=intensity))
+        await self._send(
+            GestureEvent(v=1, ts=_now_ms(), type="agent.gesture", gesture=gesture, intensity=intensity)
+        )
 
     async def flush(self) -> None:
         await self._send(FlushEvent(v=1, ts=_now_ms(), type="agent.flush"))
 
     async def transcript(self, role: str, text: str, final: bool) -> None:
-        await self._send(TranscriptEvent(v=1, ts=_now_ms(), type="transcript", role=Role(role), text=text, final=final))
+        await self._send(
+            TranscriptEvent(v=1, ts=_now_ms(), type="transcript", role=Role(role), text=text, final=final)
+        )
 
     async def warning(self, code: str, message: str) -> None:
         await self._send(

@@ -1,155 +1,121 @@
-# MetaAvatar — project control.  Run `make` or `make help` to see every target.
+# MetaAvatar — project control.  Run `make` to see the commands.
+#
+#   make start   start everything (Docker + API + agent worker + Studio) in the background
+#   make stop    stop everything
+#
+# First run: `make start` creates .env, installs dependencies and builds what it needs.
 
-SHELL := /bin/bash
+SHELL       := /bin/bash
 .DEFAULT_GOAL := help
 
 ROOT        := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+RUN         := $(ROOT)/scripts/run.sh
 WORKER_DIR  := $(ROOT)/services/agent-worker
-COMPOSE     := docker compose -f $(ROOT)/infra/docker/compose.yaml
 UV_RUN      := cd $(WORKER_DIR) && PYTHONWARNINGS=ignore::SyntaxWarning uv run
-STUDIO_URL  := http://localhost:3100/playground
-API_URL     := http://localhost:8787
 
 # ---------------------------------------------------------------------------------------------------
-##@ Setup
+##@ Everyday
 
-.PHONY: setup
-setup: env install protocol infra-up ## First-time setup: .env, dependencies, protocol build, LiveKit
-	@echo ""
-	@echo "Setup done. Add LIVE_MODEL_API_KEY to .env if you haven't, then run: make dev"
+.PHONY: start
+start: ## Start everything (Docker, API, agent worker, Studio) in the background
+	@$(RUN) start
 
-.PHONY: env
-env: ## Create .env from .env.example (never overwrites an existing .env)
-	@if [ -f .env ]; then echo ".env already exists, leaving it alone"; else cp .env.example .env && echo "Created .env (add LIVE_MODEL_API_KEY)"; fi
+.PHONY: stop
+stop: ## Stop everything (services and Docker)
+	@$(RUN) stop
 
-.PHONY: install
-install: ## Install Node and Python dependencies
-	pnpm install
-	cd $(WORKER_DIR) && uv sync
+.PHONY: restart
+restart: ## Stop, then start again
+	@$(RUN) restart
 
-.PHONY: protocol
-protocol: ## Build the shared protocol package
-	pnpm --filter @metaavatar/protocol build
-
-.PHONY: gen-protocol
-gen-protocol: ## Regenerate Python protocol models from the Zod schemas
-	pnpm --filter @metaavatar/protocol run gen
-
-.PHONY: doctor
-doctor: ## Check tools, ports, LiveKit and the Gemini key (prints no secrets)
-	@ok() { printf "  \033[32m✓\033[0m %s\n" "$$1"; }; bad() { printf "  \033[31m✗\033[0m %s\n" "$$1"; }; \
-	echo "Tools:"; \
-	for t in node pnpm uv docker; do command -v $$t >/dev/null && ok "$$t $$($$t --version 2>/dev/null | head -1)" || bad "$$t not found"; done; \
-	echo "Config:"; \
-	[ -f .env ] && ok ".env present" || bad ".env missing (run: make env)"; \
-	if grep -qE '^LIVE_MODEL_API_KEY=.+' .env 2>/dev/null || [ -n "$$LIVE_MODEL_API_KEY$$GEMINI_API_KEY" ]; then ok "Gemini key configured"; else bad "No LIVE_MODEL_API_KEY in .env"; fi; \
-	echo "Services:"; \
-	curl -s -o /dev/null --max-time 2 http://localhost:7880 && ok "LiveKit on :7880" || bad "LiveKit not running (run: make infra-up)"; \
-	curl -s --max-time 2 $(API_URL)/health | grep -q ok && ok "API on :8787" || echo "  - API not running"; \
-	curl -s -o /dev/null --max-time 2 http://localhost:3100 && ok "Studio on :3100" || echo "  - Studio not running"; \
-	pgrep -f "agent_worker.main" >/dev/null && ok "Agent worker running" || echo "  - Agent worker not running"
-
-.PHONY: check-key
-check-key: ## Test the Gemini key with one tiny request
-	$(UV_RUN) python -c "from agent_worker.preflight import check_gemini; from agent_worker.settings import load_settings; raise SystemExit(0 if check_gemini(load_settings()) else 1)"
-
-# ---------------------------------------------------------------------------------------------------
-##@ Run
-
-.PHONY: dev
-dev: infra-up protocol ## Run LiveKit + API + agent worker + Studio together (Ctrl-C stops all)
-	@echo "Starting API, agent worker and Studio. Open $(STUDIO_URL) in Chrome or Safari."
-	@trap 'kill 0' INT TERM EXIT; \
-	( $(MAKE) --no-print-directory api    2>&1 | sed -u 's/^/[api]    /' ) & \
-	( $(MAKE) --no-print-directory worker 2>&1 | sed -u 's/^/[worker] /' ) & \
-	( $(MAKE) --no-print-directory studio 2>&1 | sed -u 's/^/[studio] /' ) & \
-	wait
-
-.PHONY: api
-api: ## Run the session API (http://localhost:8787)
-	pnpm --filter @metaavatar/api dev
-
-.PHONY: worker
-worker: ## Run the Gemini Live agent worker
-	$(UV_RUN) python -m agent_worker.main start
-
-.PHONY: studio
-studio: ## Run Studio (http://localhost:3100/playground)
-	pnpm --filter @metaavatar/studio dev
-
-.PHONY: open
-open: ## Open the playground in your default browser
-	open $(STUDIO_URL)
-
-# ---------------------------------------------------------------------------------------------------
-##@ Infrastructure (Docker)
-
-.PHONY: infra-up
-infra-up: ## Start the local LiveKit server
-	$(COMPOSE) up -d livekit
-
-.PHONY: infra-full
-infra-full: ## Start LiveKit plus Postgres, Redis and MinIO
-	$(COMPOSE) --profile full up -d
-
-.PHONY: infra-down
-infra-down: ## Stop all local containers
-	$(COMPOSE) --profile full down
+.PHONY: status
+status: ## Show what's running and whether setup looks right
+	@$(RUN) status
 
 .PHONY: logs
-logs: ## Follow LiveKit server logs
-	$(COMPOSE) logs -f livekit
+logs: ## Follow logs. One service: make logs s=worker (api|worker|studio|livekit)
+	@$(RUN) logs $(s)
 
-.PHONY: ps
-ps: ## Show local containers
-	$(COMPOSE) --profile full ps
+.PHONY: open
+open: ## Open the playground in your browser
+	@open http://localhost:3100/playground
+
+# ---------------------------------------------------------------------------------------------------
+##@ Development
+
+.PHONY: dev
+dev: ## Like start, but stays in this terminal with live logs; Ctrl-C stops everything
+	@$(RUN) dev
+
+.PHONY: key
+key: ## Test the Gemini key with one tiny request
+	@$(UV_RUN) python -c "from agent_worker.preflight import check_gemini; from agent_worker.settings import load_settings; raise SystemExit(0 if check_gemini(load_settings()) else 1)" && echo "Gemini key works"
+
+.PHONY: install
+install: ## Reinstall dependencies and rebuild the protocol package
+	pnpm install
+	cd $(WORKER_DIR) && uv sync
+	pnpm --filter @metaavatar/protocol build
+
+.PHONY: protocol
+protocol: ## After changing packages/protocol: rebuild it and regenerate the Python models
+	pnpm --filter @metaavatar/protocol build
+	pnpm --filter @metaavatar/protocol run gen
 
 # ---------------------------------------------------------------------------------------------------
 ##@ Quality
 
 .PHONY: check
-check: typecheck lint test ## Typecheck, lint and test everything
+check: typecheck lint test ## Everything below in one go: typecheck, lint, tests (run before committing)
+	@printf "\n\033[32mAll checks passed.\033[0m\n"
 
 .PHONY: test
-test: protocol ## Run all tests (TypeScript + Python)
+test: _protocol-dist ## Run all tests (TypeScript and Python)
 	pnpm -r --filter './packages/*' --filter './services/api' test
 	$(UV_RUN) pytest -q
 
 .PHONY: typecheck
-typecheck: protocol ## Typecheck all TypeScript packages
+typecheck: _protocol-dist ## Typecheck all TypeScript (API, runtime, Studio, protocol)
 	pnpm -r typecheck
 
 .PHONY: lint
-lint: ## Lint the Python worker
-	cd $(WORKER_DIR) && uv run ruff check .
+lint: ## Lint the Python worker and check its formatting (ruff)
+	cd $(WORKER_DIR) && uv run ruff check . && uv run ruff format --check .
 
 .PHONY: fmt
-fmt: ## Auto-fix Python lint issues and format
+fmt: ## Auto-fix lint issues and format the Python worker
 	cd $(WORKER_DIR) && uv run ruff check --fix . && uv run ruff format .
+
+.PHONY: _protocol-dist
+_protocol-dist:
+	@pnpm --filter @metaavatar/protocol build >/dev/null
 
 # ---------------------------------------------------------------------------------------------------
 ##@ Cleanup
 
-.PHONY: stop
-stop: ## Stop dev servers started outside `make dev` (API, Studio, worker)
-	-@pkill -f "agent_worker.main" && echo "stopped worker" || true
-	-@lsof -ti tcp:8787 | xargs kill 2>/dev/null && echo "stopped api" || true
-	-@lsof -ti tcp:3100 | xargs kill 2>/dev/null && echo "stopped studio" || true
-
 .PHONY: clean
-clean: ## Remove build output (keeps dependencies and .env)
-	rm -rf packages/protocol/dist apps/studio/.next
-	find services/agent-worker -name __pycache__ -type d -prune -exec rm -rf {} +
+clean: _not-running ## Remove build output, caches and logs (keeps dependencies and .env)
+	rm -rf packages/protocol/dist services/api/dist apps/studio/.next .run
+	find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete
+	cd $(WORKER_DIR) && rm -rf .pytest_cache .ruff_cache .mypy_cache
+	find $(WORKER_DIR) -name __pycache__ -type d -not -path '*/.venv/*' -prune -exec rm -rf {} +
+	@echo "Clean. Next 'make start' rebuilds what it needs."
 
-.PHONY: distclean
-distclean: clean infra-down ## Also remove node_modules, the Python venv and local container data
+.PHONY: reset
+reset: stop clean ## Clean, plus remove node_modules, the Python venv and container data; keeps .env
 	rm -rf node_modules apps/*/node_modules packages/*/node_modules services/api/node_modules
 	rm -rf $(WORKER_DIR)/.venv infra/docker/data
+	@echo "Reset. Next 'make start' reinstalls everything."
+
+.PHONY: _not-running
+_not-running:
+	@if lsof -ti tcp:8787,3100 -sTCP:LISTEN >/dev/null 2>&1 || pgrep -f agent_worker.main >/dev/null; then \
+		echo "Services are running. Run 'make stop' first (clean would delete files they are using)."; exit 1; fi
 
 # ---------------------------------------------------------------------------------------------------
 .PHONY: help
-help: ## Show this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
-		/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 } \
+help:
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage: make \033[36m<command>\033[0m\n"} \
+		/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2 } \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 	@echo ""

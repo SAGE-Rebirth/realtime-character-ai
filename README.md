@@ -16,17 +16,17 @@ Original brief: [project_details.jpeg](project_details.jpeg)
 Prerequisites: Docker Desktop (or OrbStack), Node 22+, pnpm, [uv](https://docs.astral.sh/uv/), and a
 Gemini API key from Google AI Studio, set as `LIVE_MODEL_API_KEY` in `.env` (falls back to `GEMINI_API_KEY`). The default live model is `gemini-3.1-flash-live-preview` on API version `v1alpha`.
 
-Everything is driven by the Makefile (`make help` lists every target):
-
 ```bash
-make setup     # .env, dependencies, protocol build, local LiveKit (first time only)
-make doctor    # check tools, key and which services are running
-make dev       # API + agent worker + Studio together; Ctrl-C stops them all
+make start     # starts Docker (LiveKit), the API, the agent worker and Studio in the background
+make stop      # stops all of it
 ```
 
-Other useful targets: `make check` (typecheck, lint, tests), `make check-key` (one tiny Gemini
-request), `make worker` / `make api` / `make studio` (run one service), `make logs` (LiveKit logs),
-`make stop`, `make infra-down`.
+The first `make start` creates `.env` (add your key, then run it again), installs dependencies and
+builds what it needs. Run `make` to see the other commands: `status`, `logs` (or `make logs s=worker`),
+`restart`, `dev` (start with live logs; Ctrl-C stops everything) and `key` (checks the Gemini key).
+Quality: `make check` runs typecheck, lint and tests (or each alone: `typecheck`, `lint`, `test`);
+`make fmt` fixes formatting. Cleanup: `make clean` removes build output, caches and logs;
+`make reset` also removes installed dependencies. Logs are written to `.run/`.
 
 Open http://localhost:3100/playground and press **Start conversation**. **Lip-sync test** works
 without Gemini: the avatar mouths whatever your microphone hears.
@@ -40,4 +40,4 @@ without Gemini: the avatar mouths whatever your microphone hears.
 | `apps/studio` | Next.js Studio; `/playground` is the test bench with live metrics |
 | `infra/docker` | Local LiveKit (and optional Postgres/Redis/MinIO with `--profile full`) |
 
-Tests: `make test` (TypeScript and Python).
+Before committing: `make check`.
