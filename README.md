@@ -16,21 +16,17 @@ Original brief: [project_details.jpeg](project_details.jpeg)
 Prerequisites: Docker Desktop (or OrbStack), Node 22+, pnpm, [uv](https://docs.astral.sh/uv/), and a
 Gemini API key from Google AI Studio, set as `LIVE_MODEL_API_KEY` in `.env` (falls back to `GEMINI_API_KEY`). The default live model is `gemini-3.1-flash-live-preview` on API version `v1alpha`.
 
-```bash
-cp .env.example .env            # then adjust if needed
-pnpm install
-pnpm --filter @metaavatar/protocol build
-pnpm infra:up                   # local LiveKit server (Docker)
-(cd services/agent-worker && uv sync)
-```
-
-Then, in three terminals:
+Everything is driven by the Makefile (`make help` lists every target):
 
 ```bash
-pnpm dev:api        # session API on http://localhost:8787
-pnpm dev:worker     # Gemini Live agent worker
-pnpm dev:studio     # Studio on http://localhost:3100/playground
+make setup     # .env, dependencies, protocol build, local LiveKit (first time only)
+make doctor    # check tools, key and which services are running
+make dev       # API + agent worker + Studio together; Ctrl-C stops them all
 ```
+
+Other useful targets: `make check` (typecheck, lint, tests), `make check-key` (one tiny Gemini
+request), `make worker` / `make api` / `make studio` (run one service), `make logs` (LiveKit logs),
+`make stop`, `make infra-down`.
 
 Open http://localhost:3100/playground and press **Start conversation**. **Lip-sync test** works
 without Gemini: the avatar mouths whatever your microphone hears.
@@ -44,4 +40,4 @@ without Gemini: the avatar mouths whatever your microphone hears.
 | `apps/studio` | Next.js Studio; `/playground` is the test bench with live metrics |
 | `infra/docker` | Local LiveKit (and optional Postgres/Redis/MinIO with `--profile full`) |
 
-Tests: `pnpm test` (TypeScript) and `cd services/agent-worker && uv run pytest`.
+Tests: `make test` (TypeScript and Python).
