@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "studio", "runtimeExecutable": "pnpm", "runtimeArgs": ["--filter", "@metaavatar/studio", "dev"], "port": 3100 },
+    { "name": "api", "runtimeExecutable": "pnpm", "runtimeArgs": ["--filter", "@metaavatar/api", "dev"], "port": 8787 }
+  ]
+}

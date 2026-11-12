@@ -1,0 +1,17 @@
+{
+  "name": "@metaavatar/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "gen": "pnpm build && node scripts/emit-json-schema.mjs && uvx --from datamodel-code-generator datamodel-codegen --input schema/protocol.schema.json --input-file-type jsonschema --output ../../services/agent-worker/agent_worker/protocol_models.py --output-model-type pydantic_v2.BaseModel --use-annotated --use-standard-collections --target-python-version 3.12 --disable-timestamp --use-title-as-name --formatters black isort"
+  },
+  "dependencies": { "zod": "^4.1.0" },
+  "devDependencies": { "typescript": "^5.9.0", "vitest": "^3.2.0" }
+}

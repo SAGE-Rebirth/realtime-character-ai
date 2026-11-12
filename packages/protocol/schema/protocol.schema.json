@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MetaAvatarProtocol",
+  "type": "object",
+  "properties": {
+    "AgentConfig": {
+      "$ref": "#/$defs/AgentConfig"
+    },
+    "AvatarEvent": {
+      "$ref": "#/$defs/AvatarEvent"
+    },
+    "CreateSessionRequest": {
+      "$ref": "#/$defs/CreateSessionRequest"
+    },
+    "CreateSessionResponse": {
+      "$ref": "#/$defs/CreateSessionResponse"
+    }
+  },
+  "$defs": {
+    "AgentConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "greeting": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "voice": {
+          "default": "Kore",
+          "type": "string"
+        },
+        "language": {
+          "default": "en-US",
+          "type": "string"
+        },
+        "audience": {
+          "default": "general",
+          "type": "string",
+          "enum": [
+            "general",
+            "teen",
+            "kids"
+          ],
+          "title": "AudienceProfile"
+        },
+        "renderer": {
+          "default": "3d",
+          "type": "string",
+          "enum": [
+            "3d"
+          ]
+        },
+        "avatar": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "vrm"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "url"
+              ],
+              "title": "VrmAvatarRef"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "procedural"
+                },
+                "style": {
+                  "default": "default",
+                  "type": "string",
+                  "enum": [
+                    "default"
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "title": "ProceduralAvatarRef"
+            }
+          ]
+        },
+        "groundingSearch": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "instructions",
+        "avatar"
+      ]
+    },
+    "AvatarEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent.state"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "initializing",
+                "listening",
+                "thinking",
+                "speaking",
+                "idle"
+              ],
+              "title": "AgentState"
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type",
+            "state"
+          ],
+          "title": "AgentStateEvent"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent.emotion"
+            },
+            "emotion": {
+              "type": "string",
+              "enum": [
+                "neutral",
+                "happy",
+                "sad",
+                "angry",
+                "surprised",
+                "relaxed",
+                "thinking"
+              ],
+              "title": "Emotion"
+            },
+            "intensity": {
+              "default": 0.7,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type",
+            "emotion"
+          ],
+          "title": "EmotionEvent"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent.gesture"
+            },
+            "gesture": {
+              "type": "string",
+              "enum": [
+                "none",
+                "wave",
+                "nod",
+                "shake_head",
+                "shrug",
+                "explain",
+                "point",
+                "celebrate",
+                "think"
+              ],
+              "title": "Gesture"
+            },
+            "intensity": {
+              "default": 0.7,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type",
+            "gesture"
+          ],
+          "title": "GestureEvent"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent.flush"
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type"
+          ],
+          "title": "FlushEvent"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "transcript"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "user",
+                "agent"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "final": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type",
+            "role",
+            "text",
+            "final"
+          ],
+          "title": "TranscriptEvent"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "session.warning"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "reconnecting",
+                "quota",
+                "safety",
+                "ending"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type",
+            "code",
+            "message"
+          ],
+          "title": "SessionWarningEvent"
+        }
+      ]
+    },
+    "CreateSessionRequest": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endUserRef": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "agentId"
+      ]
+    },
+    "CreateSessionResponse": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "livekitUrl": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "renderer": {
+              "default": "3d",
+              "type": "string",
+              "enum": [
+                "3d"
+              ]
+            },
+            "avatar": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "vrm"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "url"
+                  ],
+                  "title": "VrmAvatarRef"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "procedural"
+                    },
+                    "style": {
+                      "default": "default",
+                      "type": "string",
+                      "enum": [
+                        "default"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "title": "ProceduralAvatarRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "avatar"
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "livekitUrl",
+        "token",
+        "agent"
+      ]
+    }
+  }
+}

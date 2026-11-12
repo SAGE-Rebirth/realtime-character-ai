@@ -1,0 +1,17 @@
+{
+  "name": "metaavatar",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "infra:up": "docker compose -f infra/docker/compose.yaml up -d",
+    "infra:down": "docker compose -f infra/docker/compose.yaml down",
+    "build": "pnpm -r --filter './packages/*' run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "dev:api": "pnpm --filter @metaavatar/api dev",
+    "dev:studio": "pnpm --filter @metaavatar/studio dev",
+    "dev:worker": "cd services/agent-worker && PYTHONWARNINGS=ignore::SyntaxWarning uv run python -m agent_worker.main start",
+    "gen:protocol": "pnpm --filter @metaavatar/protocol run gen"
+  }
+}
