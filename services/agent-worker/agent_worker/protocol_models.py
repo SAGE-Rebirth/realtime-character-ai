@@ -65,6 +65,7 @@ class AgentConfig(BaseModel):
     ] = {'warmth': 0.6, 'formality': 0.4, 'detail': 0.3, 'humor': 0.3}
     groundingSearch: bool | None = False
     knowledge: Annotated[list[str] | None, Field(max_length=50)] = []
+    memory: bool | None = False
 
 
 class AgentState(StrEnum):

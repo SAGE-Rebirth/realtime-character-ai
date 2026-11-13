@@ -17,7 +17,7 @@ cloud or paid-plan budget and wait until it exists.
 |---|---|---|
 | 0 | Foundations: monorepo, local stack, protocol, CI | **Done**. CI has not run on GitHub yet |
 | 1 | Core loop: Gemini Live agent + 3D avatar, lip-sync, barge-in | **Mostly done**: 4 of 6 acceptance checks met |
-| 2 | Persona Studio: agents as configuration | **Mostly done**: knowledge base built; memory, accounts and custom voices left |
+| 2 | Persona Studio: agents as configuration | **Mostly done**: knowledge base and memory built; accounts and custom voices left |
 | 3 | Interaction surface: vision, tools, widget, API, meetings | Not started (Studio pages planned) |
 | 4 | Avatar Forge: avatar from a photo or character art | Not started |
 | 5 | Safety and compliance hardening (release gate) | Partly done: platform rules and audiences |
@@ -41,6 +41,47 @@ Do these before, or alongside, the next phase. Each one is small.
   it may take a day or two of runs.
 - [ ] Turn on the pre-commit hook on each machine: `make hooks`.
 
+### Quality pass, 13 November 2026
+Every Studio page and setting was exercised in the browser (create, edit each panel, switch voice,
+avatar and camera, publish, discard, delete, knowledge add/search/remove, playground switches,
+phone width). Fixed along the way:
+- [x] The built-in character showed for a moment before a VRM avatar on every page load.
+- [x] A browser tab holding an older copy of an agent could overwrite newer edits; such saves are
+  now refused with a "reload" message.
+- [x] No way to throw away draft changes when only one version was published.
+- [x] Avatar models now live in `assets/avatars/` under their own file names; Studio shows each
+  model's path, licence and source.
+- [x] Gestures and expressions can be played from the Appearance panel and the Avatars page (they
+  were only at the bottom of the Playground).
+- [x] Page title was lost when moving between editor panels; an aborted audio set-up logged errors.
+Still open from this pass: 16 of 30 voice samples are missing (`make voices`), and live
+conversations were not re-run because the Gemini quota was used up.
+
+### Quality, performance and security pass, 13 November 2026 (evening)
+Measured on the MacBook M4 against the running stack.
+
+| Check | Result |
+|---|---|
+| API speed, 50 requests at once | Agent list and detail 14,000–20,000 requests/s, p95 5–6 ms; avatar list 6,000/s; memory search 15,000/s; no errors |
+| Document search | p50 0.41 s, p95 0.76 s. Almost all of it is the call to Gemini that embeds the question |
+| 10 MB avatar download, 8 at once | p95 82 ms (was 430 ms before files were streamed) |
+| API memory under repeated load | Settles near 390 MB under `make start` (was growing past 600 MB: each avatar download was read into memory). In Docker, idle: 76 MB |
+| Process sizes, idle | Docker: API 76 MB, Studio 52 MB, LiveKit 35 MB, worker 732 MB (it keeps a pool of ready processes). Local dev: API 170 MB, Studio 330 MB |
+| Browser, 12 avatar swaps | No leak: GPU geometries and textures unchanged; 0.26 ms per frame |
+| Live voice through the Docker stack | Reply 0.97 s and 1.05 s; typed reply 0.78 s; barge-in stops speech in 0.03 s; no missed turns |
+| Dependency audit | Node: one moderate issue in `@hono/node-server`, fixed by upgrading to 2.1.6. Python: none known |
+| Containers | Run as a non-root user; the Gemini key is not in any image layer; ports are published on this machine only |
+
+Security changes made: the API answers this machine only unless `API_HOST=0.0.0.0` is set; safe
+response headers; a 2 MB limit on JSON bodies; starting conversations is limited to 30 a minute
+and fetching web pages to 20 a minute per caller; LiveKit's ports are no longer open to the
+network.
+
+Security gaps that remain (all need the accounts work): **no sign-in**, so anyone who can reach
+Studio or the API can read and change everything, including visitors' memories; the worker calls
+the API without credentials; rate limits are per process and in memory; web-page fetching checks
+the address but not what it resolves to; LiveKit runs with its public development keys.
+
 ### Verification not done yet
 - [ ] **Knowledge base with real documents**: tested with a short PDF, a Word file and one web page.
   Try a long manual (100+ pages), a scanned PDF (expected to be refused with a clear message) and
@@ -50,9 +91,17 @@ Do these before, or alongside, the next phase. Each one is small.
   questions only.
 - [ ] **Test with a real microphone** in Chrome and Safari: start a conversation, talk over the
   avatar, mute and unmute. Every voice test so far used a scripted voice or typed messages.
-- [ ] **Load a real VRM model**: upload one under Avatars, assign it to an agent, and check the lip-sync,
-  blinks and gestures. Only the built-in character has been tested. A free CC0 or VRoid model is
-  needed (pick one with a licence that allows commercial use).
+- [x] **Load a real VRM model**: done 13 November 2026 with pixiv's VRM 1.0 sample
+  (`VRM1_Constraint_Twist_Sample`, VRM Public License 1.0, commercial use allowed), in the library
+  as "Mira". Lip-sync with the live voice, blinks, emotions, hair physics and the gestures tried
+  (wave, explain, think) all work at 60 fps. Testing VRM 0.x models found and fixed a bug: their
+  arms pointed straight up.
+- [ ] **A professional-looking avatar** (an adult in a suit, a teacher): none found that can be
+  downloaded without signing in. VRoid Hub has many (search "teacher" or "suit", then "Filter by
+  conditions of use"), but downloads need a pixiv account. Any `.vrm` copied into
+  `assets/avatars/` appears in Studio; see `assets/avatars/README.md`.
+- [ ] Gesture clips were tuned on the built-in character: on VRM models the "think" hand lands on
+  the cheek. Retune per body proportions, or retarget real clips.
 - [ ] **Check the voice change end to end**: the worker now logs `voice=` when a session starts, but
   nobody has confirmed by ear that a changed voice is used.
 - [ ] **Light and dark mode, phone and tablet**: checked on a few pages only.
@@ -88,7 +137,7 @@ avatar and documents) in Studio, and both give grounded, cited answers on the st
 - [x] Personality: instructions plus four tone sliders that the worker turns into instructions.
 - [x] Voice picker with all 30 Gemini voices and samples.
 - [x] Appearance: built-in character, VRM upload library, camera framing.
-- [x] Google Search grounding toggle, passed to Gemini as a tool.
+- [x] Google Search grounding toggle, passed to Gemini as a tool (not yet seen working live, see below).
 - [x] Audience setting (adults, teenagers, children) and platform rules shown in Studio.
 - [x] Live test stage in the editor: talks to the draft and offers a restart after edits.
 
@@ -96,6 +145,23 @@ avatar and documents) in Studio, and both give grounded, cited answers on the st
   text), search by meaning and by words, per-agent document picker, `search_knowledge_base` tool in
   the worker, source names under the captions, and a test console (`services/api/src/knowledge/`).
 - [x] Duplicate, delete and search agents from the agents list.
+- [x] Memory: opt-in per agent and always off for the children audience; `remember` and `recall`
+  tools in the worker; notes kept per agent and visitor (`services/api/src/memory.ts`); the
+  visitor's earlier notes are given to the agent when a conversation starts; Studio's Memory panel
+  lists and deletes what the agent remembers about you. Tested live: a second conversation
+  recalled a name and a hobby from the first.
+- [x] Versions can be saved without going live, viewed (with differences from the draft), opened
+  for editing, and any version can be made live in one step.
+- [x] Gestures and expressions follow the reply as it is spoken (chosen in the browser from the
+  streaming captions), questions that need thought get a thinking look, and the thinking face
+  now shows on VRM models. Clicking the avatar plays a random gesture.
+- [x] Memory page in the main menu listing every saved note by agent and visitor.
+- [x] Home page with a walkthrough that ticks itself off; readiness checklist in the Publish
+  dialog; Undo instead of "are you sure?" for deleting agents, documents, avatars and notes; a
+  transcript under the stage with Copy; portrait thumbnails for avatar models.
+- [x] The whole application runs in Docker (`make docker`): LiveKit, API, worker and Studio.
+- [x] Studio navigation: back and forward buttons, breadcrumbs, previous and next between an
+  agent's panels; the Playground and Avatars pages remember their choices across a refresh.
 
 ### Left to do
 **Knowledge base, next steps** 💻
@@ -109,13 +175,24 @@ avatar and documents) in Studio, and both give grounded, cited answers on the st
 - [ ] The worker reaches the API without credentials (fine on one laptop). Add a service token
   when accounts arrive.
 
-**Citations for web search** 💻
-- [ ] Pass Gemini's grounding metadata through the data channel as `agent.sources` events (the
-  event and the caption display already exist for documents).
+**Web search and its citations** 💻
+- [x] Worker forwards Gemini's search citations as `agent.sources` events
+  (`agent_worker/grounding.py`), shown under the captions like document sources. Unit-tested only.
+- [ ] **Web search needs retesting with a fresh key.** On 13 November 2026 every session with
+  Google Search switched on was closed by Gemini with "quota exceeded", while sessions without it
+  still worked on the same key. The account's quota was running out that day, so it is not known
+  whether search has a separate allowance. Test search and its citations live with the new key.
 
-**Memory** 💻
-- [ ] Opt-in per agent (forced off for the children audience).
-- [ ] `remember` / `recall` tools, a summary job after each session, and "forget me" for visitors.
+**Memory, next steps** 💻
+- [ ] A summary job after each session (today the agent saves notes itself with `remember`).
+- [ ] A "forget me" control for visitors on embedded pages (today it is in Studio's Memory panel
+  and the `DELETE /memory` route).
+- [ ] Move `data/memory.json` to Postgres with the other stores.
+
+**Database** 💻 *(next: the data is still files)*
+- [ ] Move agents, memory and the knowledge index from files under `data/` to Postgres + pgvector
+  (already defined in `compose.yaml` under the `full` profile, not used yet). Add it to the `app`
+  profile once the stores use it, with migrations and a backup command.
 
 **Accounts and teams** 💻
 - [ ] Sign-in for Studio, organisations, members and roles (owner, editor, viewer).
@@ -128,6 +205,8 @@ avatar and documents) in Studio, and both give grounded, cited answers on the st
 - [ ] Voice cloning only with a consent recording from the voice's owner.
 
 **Smaller items** 💻
+- [ ] Gesture cues know English well and a few everyday words in the other offered languages;
+  anything else falls back to punctuation. A small model-chosen cue per sentence would be better.
 - [ ] Body language: add a "count" gesture; optionally turn on the `express` tool per agent
   (`AVATAR_EXPRESS_TOOL=1` today, but it costs about 1 s a turn).
 - [ ] Duplicate and delete agents from the Studio UI (the API supports both).
@@ -232,7 +311,7 @@ Runs in parallel with the product phases. Only N0 fits the laptop budget.
 1. **Close out:** commit, push, get CI green, finish the voice samples, test with a real mic and a VRM model.
 2. ~~**Knowledge base**~~: done on 13 November 2026. Phase 2's "done" test (two agents with
    different documents giving cited answers) can now be run by hand.
-3. **Web search citations and memory:** both small now that sources and the search tool exist.
+3. ~~**Memory**~~: done on 13 November 2026. Web search and its citations still need a live test.
 4. **Accounts and the Postgres store:** needed before anyone else uses Studio.
 5. **LAM spike:** answers early whether photoreal heads are good enough before Phase 4.
 6. **Phase 3 widget and tools:** the first thing a customer would touch.

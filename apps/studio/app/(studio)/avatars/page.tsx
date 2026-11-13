@@ -2,13 +2,20 @@
 
 import type { AvatarRef } from "@metaavatar/protocol";
 import { useState } from "react";
+import type { AvatarRuntime } from "@metaavatar/avatar-runtime";
 import AvatarPicker from "@/components/AvatarPicker";
+import GesturePad from "@/components/GesturePad";
 import Stage from "@/components/Stage";
+import { usePersisted } from "@/lib/usePersisted";
 import { PageHeader, Section, Tag, ui } from "@/components/ui";
 import s from "./avatars.module.css";
 
 export default function AvatarsPage() {
-  const [preview, setPreview] = useState<AvatarRef>({ kind: "procedural", style: "default" });
+  const [preview, setPreview, previewLoaded] = usePersisted<AvatarRef>("avatars.preview", {
+    kind: "procedural",
+    style: "default",
+  });
+  const [runtime, setRuntime] = useState<AvatarRuntime | null>(null);
   return (
     <div className={s.page}>
       <PageHeader
@@ -20,6 +27,9 @@ export default function AvatarsPage() {
           <Section title="Library">
             <AvatarPicker value={preview} onPreview={setPreview} />
           </Section>
+          <Section title="Body language" help="Play each gesture and expression on the avatar shown on the stage.">
+            <GesturePad runtime={runtime} />
+          </Section>
           <Section title="Create from a photo" help="Turn a photo or a character drawing into an avatar, with consent checks for real people.">
             <p>
               <Tag>Planned for phase 4</Tag>
@@ -30,7 +40,7 @@ export default function AvatarsPage() {
           </Section>
         </div>
         <div className={s.stage}>
-          <Stage agentId={null} agentName="Preview" avatar={preview} framing="full" variant="fill" />
+          {previewLoaded && <Stage agentId={null} agentName="Preview" avatar={preview} framing="full" variant="fill" onRuntime={setRuntime} />}
         </div>
       </div>
     </div>

@@ -1,0 +1,21 @@
+# Keep images small and secrets out of them. Data and models are mounted, never copied.
+**/node_modules
+**/.next
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+.git
+.run
+.env
+.env.*
+!.env.example
+data
+assets/avatars/*.vrm
+assets/avatars/*.png
+infra/docker/data
+evals/results
+docs
+*.jpeg

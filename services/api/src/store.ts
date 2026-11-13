@@ -17,7 +17,7 @@ import {
 } from "@metaavatar/protocol";
 import { templateDraft } from "./templates";
 
-interface StoredVersion extends AgentVersionMeta {
+interface StoredVersion extends Omit<AgentVersionMeta, "live"> {
   config: AgentDraft;
 }
 
@@ -25,6 +25,8 @@ interface StoredAgent {
   id: string;
   draft: AgentDraft;
   versions: StoredVersion[];
+  /** Number of the version visitors get. Older files have none: the newest version is live. */
+  liveVersion?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +36,8 @@ interface StoreFile {
 }
 
 export class NotFoundError extends Error {}
+/** The draft was changed by someone else since the caller last read it. */
+export class ConflictError extends Error {}
 
 const same = (a: AgentDraft, b: AgentDraft) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -129,8 +133,14 @@ export class AgentStore {
     return a;
   }
 
+  /** The version visitors get, if any. */
+  private live(a: StoredAgent): StoredVersion | undefined {
+    if (a.liveVersion === null) return undefined;
+    return a.versions.find((v) => v.version === a.liveVersion) ?? (a.liveVersion === undefined ? a.versions.at(-1) : undefined);
+  }
+
   private summary(a: StoredAgent): AgentSummary {
-    const latest = a.versions.at(-1);
+    const latest = this.live(a);
     return {
       id: a.id,
       name: a.draft.name,
@@ -149,19 +159,21 @@ export class AgentStore {
 
   get(id: string): AgentDetail {
     const a = this.find(id);
-    const latest = a.versions.at(-1);
+    const latest = this.live(a);
     return {
       ...this.summary(a),
       draft: AgentConfig.parse({ ...a.draft, id: a.id }),
       published: latest ? AgentConfig.parse({ ...latest.config, id: a.id }) : null,
-      versions: a.versions.map(({ version, publishedAt, note }) => ({ version, publishedAt, note })).reverse(),
+      versions: a.versions
+        .map(({ version, publishedAt, note }) => ({ version, publishedAt, note, live: version === latest?.version }))
+        .reverse(),
     };
   }
 
   /** The config a live session should use, or null if that version doesn't exist. */
   sessionConfig(id: string, which: "draft" | "published"): AgentConfig | null {
     const a = this.find(id);
-    const cfg = which === "draft" ? a.draft : a.versions.at(-1)?.config;
+    const cfg = which === "draft" ? a.draft : this.live(a)?.config;
     return cfg ? AgentConfig.parse({ ...cfg, id: a.id }) : null;
   }
 
@@ -182,22 +194,57 @@ export class AgentStore {
     return this.get(agent.id);
   }
 
-  updateDraft(id: string, draft: unknown): AgentDetail {
+  /**
+   * Saves the draft. With `basedOn` (the `updatedAt` the caller last saw), the save is refused if
+   * the agent changed in the meantime, so a stale browser tab can't silently undo newer edits.
+   */
+  updateDraft(id: string, draft: unknown, basedOn?: string): AgentDetail {
     const a = this.find(id);
+    if (basedOn && basedOn !== a.updatedAt) throw new ConflictError(id);
     a.draft = AgentDraft.parse(draft);
     a.updatedAt = new Date().toISOString();
     this.save();
     return this.get(id);
   }
 
+  /** Saves the draft as a new version and makes it the live one. */
   publish(id: string, note = ""): AgentDetail {
+    return this.saveVersion(id, note, true);
+  }
+
+  /**
+   * Saves the draft as a numbered version. With `live` false it is only kept (a checkpoint to come
+   * back to); visitors keep getting the current live version.
+   */
+  saveVersion(id: string, note = "", live = false): AgentDetail {
     const a = this.find(id);
     const version = (a.versions.at(-1)?.version ?? 0) + 1;
     const now = new Date().toISOString();
+    // Pin the current live version before adding one, for files written before liveVersion existed.
+    if (a.liveVersion === undefined) a.liveVersion = this.live(a)?.version ?? null;
     a.versions.push({ version, publishedAt: now, note, config: structuredClone(a.draft) });
+    if (live) a.liveVersion = version;
     a.updatedAt = now;
     this.save();
     return this.get(id);
+  }
+
+  /** Makes an existing version the one visitors get, without touching the draft. */
+  setLive(id: string, version: number): AgentDetail {
+    const a = this.find(id);
+    if (!a.versions.some((v) => v.version === version)) throw new NotFoundError(`${id}@${version}`);
+    a.liveVersion = version;
+    a.updatedAt = new Date().toISOString();
+    this.save();
+    return this.get(id);
+  }
+
+  /** The full settings of one saved version. */
+  version(id: string, version: number): AgentConfig {
+    const a = this.find(id);
+    const v = a.versions.find((x) => x.version === version);
+    if (!v) throw new NotFoundError(`${id}@${version}`);
+    return AgentConfig.parse({ ...v.config, id: a.id });
   }
 
   /** Copies a published version back into the draft (nothing is published until Publish). */

@@ -1,0 +1,45 @@
+.page {
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.filters {
+  max-width: 320px;
+}
+.groupHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.visitor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.groupActions {
+  display: flex;
+  gap: 6px;
+}
+.notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notes li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rule);
+}
+.when {
+  color: var(--ink-3);
+  font-size: 12px;
+  white-space: nowrap;
+}

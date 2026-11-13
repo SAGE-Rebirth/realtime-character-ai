@@ -21,12 +21,19 @@ export class VrmAvatar implements AvatarModel {
   readonly root: THREE.Object3D;
   readonly eyeHeight: number;
   private lookTarget = new THREE.Object3D();
+  /**
+   * VRM 0.x models are authored facing -Z; rotateVRM0 turns the whole scene to face the camera, but
+   * each bone's own axes still point the old way. A pose written for a +Z-facing rig (motion.ts)
+   * therefore needs its X and Z rotations negated, or lowered arms go straight up.
+   */
+  private flip: 1 | -1;
 
   private constructor(
     private vrm: VRM,
     camera: THREE.Camera,
   ) {
     this.root = vrm.scene;
+    this.flip = vrm.meta?.metaVersion === "0" ? -1 : 1;
     vrm.scene.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
         o.castShadow = true;
@@ -63,18 +70,26 @@ export class VrmAvatar implements AvatarModel {
       const node = h.getNormalizedBoneNode(b);
       if (!node) continue;
       const r = pose[b];
-      node.rotation.set(r[0], r[1], r[2]);
+      node.rotation.set(r[0] * this.flip, r[1], r[2] * this.flip);
     }
   }
 
   applyFace(face: FaceState, v: Visemes): void {
     const em = this.vrm.expressionManager;
     if (!em) return;
+    // VRM has no "thinking" face, and VRM 0.x has no "surprised": stand in with a mouth shape
+    // (pursed lips for thinking, a small "oh" for surprise) while the avatar isn't speaking.
+    const quiet = 1 - Math.min(1, (v.aa + v.ih + v.ou + v.ee + v.oh) * 3);
+    const purse = face.emotion === "thinking" ? 0.35 * face.emotionWeight * quiet : 0;
+    const gasp =
+      face.emotion === "surprised" && !em.getExpression(VRMExpressionPresetName.Surprised)
+        ? 0.45 * face.emotionWeight * quiet
+        : 0;
     em.setValue(VRMExpressionPresetName.Aa, v.aa);
     em.setValue(VRMExpressionPresetName.Ih, v.ih);
-    em.setValue(VRMExpressionPresetName.Ou, v.ou);
+    em.setValue(VRMExpressionPresetName.Ou, Math.max(v.ou, purse));
     em.setValue(VRMExpressionPresetName.Ee, v.ee);
-    em.setValue(VRMExpressionPresetName.Oh, v.oh);
+    em.setValue(VRMExpressionPresetName.Oh, Math.max(v.oh, gasp));
     em.setValue(VRMExpressionPresetName.Blink, face.blink);
     for (const preset of Object.values(EMOTION_TO_PRESET)) if (preset) em.setValue(preset, 0);
     const preset = EMOTION_TO_PRESET[face.emotion];

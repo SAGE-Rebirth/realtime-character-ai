@@ -165,6 +165,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "memory": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [

@@ -41,6 +41,32 @@ open: ## Open the playground in your browser
 	@open http://localhost:3100/playground
 
 # ---------------------------------------------------------------------------------------------------
+##@ Docker (everything in containers)
+
+COMPOSE := docker compose -f $(ROOT)/infra/docker/compose.yaml
+
+.PHONY: docker
+docker: ## Build and start LiveKit, API, worker and Studio in Docker (stop `make start` first)
+	@if lsof -ti tcp:8787,3100 -sTCP:LISTEN >/dev/null 2>&1 && ! $(COMPOSE) --profile app ps -q api >/dev/null 2>&1; then \
+		echo "Ports 8787/3100 are in use by the local stack. Run 'make stop' first."; exit 1; fi
+	@test -f $(ROOT)/.env || { echo "No .env yet. Run 'make start' once, or copy .env.example to .env and add your key."; exit 1; }
+	@mkdir -p $(ROOT)/data $(ROOT)/assets/avatars
+	$(COMPOSE) --profile app up -d --build
+	@echo "Studio: http://localhost:3100   API: http://localhost:8787   (make docker-logs to watch)"
+
+.PHONY: docker-stop
+docker-stop: ## Stop and remove the containers (data in ./data and ./assets/avatars is kept)
+	$(COMPOSE) --profile app --profile full down
+
+.PHONY: docker-logs
+docker-logs: ## Follow container logs. One service: make docker-logs s=worker
+	$(COMPOSE) --profile app logs -f --tail 50 $(s)
+
+.PHONY: docker-status
+docker-status: ## Show the containers and their health
+	@$(COMPOSE) --profile app --profile full ps
+
+# ---------------------------------------------------------------------------------------------------
 ##@ Development
 
 .PHONY: dev

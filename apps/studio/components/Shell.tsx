@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import { NAV, type NavItem, SETTINGS } from "@/lib/nav";
+import { api } from "@/lib/api";
+import { EDITOR_PANELS, NAV, type NavItem, SETTINGS } from "@/lib/nav";
 import s from "./shell.module.css";
+import { UndoProvider } from "./Undo";
 
 function Mark() {
   // A tiny stage with a spotlight: the product in one glyph.
@@ -26,11 +28,66 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+/** Back and forward buttons plus "where am I": section, then agent, then panel. */
+function Wayfinder({ path }: { path: string }) {
+  const router = useRouter();
+  const [agentName, setAgentName] = useState<{ id: string; name: string } | null>(null);
+  const [, section, id, panel] = path.split("/");
+  const item = [...NAV.flatMap((g) => g.items), SETTINGS].find((i) => i.href === `/${section ?? ""}`);
+  const inAgent = section === "agents" && id;
+
+  useEffect(() => {
+    if (!inAgent) return;
+    let live = true;
+    api
+      .agent(id)
+      .then((a) => live && setAgentName({ id, name: a.draft.name }))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [inAgent, id]);
+
+  const crumbs: { label: string; href?: string }[] = [];
+  if (item) crumbs.push({ label: item.label, href: inAgent ? item.href : undefined });
+  if (inAgent) {
+    const name = agentName?.id === id ? agentName.name : "Agent";
+    const panelLabel = EDITOR_PANELS.find((p) => p.slug === (panel ?? ""))?.label;
+    crumbs.push({ label: name, href: panel ? `/agents/${id}` : undefined });
+    if (panelLabel) crumbs.push({ label: panelLabel });
+  }
+
+  return (
+    <div className={s.way}>
+      <div className={s.wayButtons}>
+        <button type="button" onClick={() => router.back()} aria-label="Go back" title="Back">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+            <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <button type="button" onClick={() => router.forward()} aria-label="Go forward" title="Forward">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+            <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      <nav aria-label="You are here" className={s.crumbs}>
+        {crumbs.map((c, i) => (
+          <span key={`${c.label}-${i}`} className={s.crumb}>
+            {i > 0 && <span aria-hidden>/</span>}
+            {c.href ? <Link href={c.href}>{c.label}</Link> : <span aria-current="page">{c.label}</span>}
+          </span>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 export default function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
-  const isActive = (href: string) => path === href || path.startsWith(`${href}/`);
+  const isActive = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
 
   return (
     <div className={s.app}>
@@ -38,7 +95,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <header className={s.topbar}>
-        <Link href="/agents" className={s.brand}>
+        <Link href="/" className={s.brand}>
           <Mark />
           <span>MetaAvatar</span>
         </Link>
@@ -48,7 +105,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       </header>
 
       <nav id="studio-nav" className={s.rail} data-open={open} aria-label="Studio">
-        <Link href="/agents" className={`${s.brand} ${s.railBrand}`}>
+        <Link href="/" className={`${s.brand} ${s.railBrand}`}>
           <Mark />
           <span>MetaAvatar</span>
           <span className={s.brandSub}>Studio</span>
@@ -67,7 +124,8 @@ export default function Shell({ children }: { children: ReactNode }) {
       </nav>
 
       <main id="main" className={s.main}>
-        {children}
+        <Wayfinder path={path} />
+        <UndoProvider>{children}</UndoProvider>
       </main>
     </div>
   );

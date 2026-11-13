@@ -68,7 +68,17 @@ export default function SettingsPage() {
             <dl className={s.list}>
               <Row label="LiveKit server" value={<code>{ws.livekitUrl}</code>} help="LIVEKIT_URL" />
               <Row label="Platform API" value={<code>{API_URL}</code>} help="NEXT_PUBLIC_API_URL" />
-              <Row label="Agents and avatars" value={<code>{ws.dataDir ?? "In memory"}</code>} help="DATA_DIR" />
+              <Row label="Agents and documents" value={<code>{ws.dataDir ?? "In memory"}</code>} help="DATA_DIR" />
+              <Row
+                label="Avatar models"
+                value={<code>{ws.avatarDir ?? "Off"}</code>}
+                help="AVATAR_DIR. Every .vrm file in this folder appears under Avatars."
+              />
+              <Row
+                label="Document search"
+                value={ws.embedModel ? <code>{ws.embedModel}</code> : "Word matching only"}
+                help="GEMINI_EMBED_MODEL. Finds passages by meaning; needs the Gemini key."
+              />
             </dl>
           </Section>
           <Section title="Team and sign-in" help="Accounts, roles and multiple workspaces.">

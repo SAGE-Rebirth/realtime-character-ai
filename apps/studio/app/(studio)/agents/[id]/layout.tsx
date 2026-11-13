@@ -18,8 +18,63 @@ const SAVE_LABEL: Record<SaveState, string> = {
   error: "Couldn't save",
 };
 
-function PublishDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface Check {
+  ok: boolean;
+  label: string;
+  /** What to do about it, and where. */
+  fix?: { text: string; href: string };
+}
+
+/** What a careful person would check before visitors get this version. None of it blocks publishing. */
+function useReadiness(open: boolean, tested: boolean): Check[] {
+  const { agent, draft } = useEditor();
+  const [avatarOk, setAvatarOk] = useState(true);
+  const [docsOk, setDocsOk] = useState(true);
+  const base = `/agents/${agent.id}`;
+
+  useEffect(() => {
+    if (!open) return;
+    if (draft.avatar.kind === "vrm") {
+      const url = draft.avatar.url;
+      api
+        .avatars()
+        .then((list) => setAvatarOk(list.some((a) => a.url === url)))
+        .catch(() => undefined);
+    } else setAvatarOk(true);
+    if (draft.knowledge.length) {
+      api
+        .knowledge()
+        .then((docs) => setDocsOk(draft.knowledge.every((id) => docs.some((d) => d.id === id && d.status === "ready"))))
+        .catch(() => undefined);
+    } else setDocsOk(true);
+  }, [open, draft.avatar, draft.knowledge]);
+
+  return [
+    {
+      ok: draft.instructions.trim().length >= 40,
+      label: draft.instructions.trim() ? "Instructions say who the agent is" : "Instructions are written",
+      fix: { text: "Write a few sentences under Personality", href: `${base}/personality` },
+    },
+    { ok: draft.role.trim().length > 0, label: "It has a role", fix: { text: "Add one line under Profile", href: base } },
+    {
+      ok: Boolean(draft.greeting?.trim()),
+      label: "It greets the visitor",
+      fix: { text: "Add a greeting under Profile, or leave it so the visitor speaks first", href: base },
+    },
+    { ok: avatarOk, label: "The avatar file is in place", fix: { text: "Pick an avatar under Appearance", href: `${base}/appearance` } },
+    { ok: docsOk, label: "Its documents are ready", fix: { text: "Check the documents under Knowledge", href: `${base}/knowledge` } },
+    {
+      ok: tested,
+      label: tested ? "You talked to this draft since the last change" : "Not tried since the last change",
+      fix: { text: "Press Talk on the stage and try a few questions first", href: "" },
+    },
+  ];
+}
+
+function PublishDialog({ open, onClose, tested }: { open: boolean; onClose: () => void; tested: boolean }) {
   const { agent, flush, replace } = useEditor();
+  const checks = useReadiness(open, tested);
+  const open_ = checks.filter((c) => !c.ok);
   const ref = useRef<HTMLDialogElement>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,6 +111,29 @@ function PublishDialog({ open, onClose }: { open: boolean; onClose: () => void }
           Your website and apps switch to this version straight away. You can roll back to an earlier
           version under Versions.
         </p>
+        <ul className={s.checks} aria-label="Before you publish">
+          {checks.map((c) => (
+            <li key={c.label} data-ok={c.ok}>
+              <span className={s.checkMark} aria-hidden>
+                {c.ok ? "✓" : "!"}
+              </span>
+              <span>
+                {c.label}
+                {!c.ok && c.fix && (
+                  <span className={s.checkFix}>
+                    {c.fix.href ? (
+                      <Link href={c.fix.href} onClick={onClose}>
+                        {c.fix.text}
+                      </Link>
+                    ) : (
+                      c.fix.text
+                    )}
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
         <Field label="What changed" htmlFor="publish-note" help="Optional. Shown in the version history.">
           <input
             id="publish-note"
@@ -72,7 +150,7 @@ function PublishDialog({ open, onClose }: { open: boolean; onClose: () => void }
             Cancel
           </button>
           <button type="submit" className={btn("primary")} disabled={busy}>
-            {busy ? "Publishing…" : `Publish version ${next}`}
+            {busy ? "Publishing…" : open_.length ? `Publish version ${next} anyway` : `Publish version ${next}`}
           </button>
         </div>
       </form>
@@ -80,17 +158,51 @@ function PublishDialog({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
+/** Previous / next at the foot of every panel, in the order people usually work through them. */
+function PanelPager({ base, current }: { base: string; current: string }) {
+  const i = EDITOR_PANELS.findIndex((p) => p.slug === current);
+  const prev = i > 0 ? EDITOR_PANELS[i - 1] : undefined;
+  const next = i >= 0 ? EDITOR_PANELS[i + 1] : undefined;
+  const href = (slug: string) => (slug ? `${base}/${slug}` : base);
+  return (
+    <nav className={s.pager} aria-label="Previous and next settings">
+      {prev ? (
+        <Link href={href(prev.slug)} className={s.pagerLink}>
+          <span className={s.pagerHint}>Previous</span>
+          <span>‹ {prev.label}</span>
+        </Link>
+      ) : (
+        <span />
+      )}
+      {next && (
+        <Link href={href(next.slug)} className={s.pagerLink} data-next>
+          <span className={s.pagerHint}>Next</span>
+          <span>{next.label} ›</span>
+        </Link>
+      )}
+    </nav>
+  );
+}
+
 function EditorFrame({ children }: { children: React.ReactNode }) {
-  const { agent, draft, save, saveError, flush } = useEditor();
+  const { agent, draft, save, saveError, saveConflict, setRuntime, flush } = useEditor();
   const path = usePathname();
   const base = `/agents/${agent.id}`;
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // The agent's saved state when a conversation was last started, to know if the draft was tried.
+  const [testedAt, setTestedAt] = useState<string | null>(null);
   const lastVersion = useRef(agent.publishedVersion);
 
   useEffect(() => {
-    document.title = `${draft.name} · MetaAvatar Studio`;
-  }, [draft.name]);
+    // Also on every panel change: moving between panels resets the title to the site default.
+    // The router resets the title to the site default just after a panel change, so set it once
+    // now and once after that.
+    const title = `${draft.name || "Untitled agent"} · MetaAvatar Studio`;
+    document.title = title;
+    const t = setTimeout(() => (document.title = title), 150);
+    return () => clearTimeout(t);
+  }, [draft.name, path]);
 
   useEffect(() => {
     if (agent.publishedVersion && agent.publishedVersion !== lastVersion.current) {
@@ -107,9 +219,6 @@ function EditorFrame({ children }: { children: React.ReactNode }) {
     <div className={s.editor}>
       <header className={s.header}>
         <div className={s.titleBlock}>
-          <Link href="/agents" className={s.back}>
-            Agents
-          </Link>
           <h1 className={s.title}>{draft.name || "Untitled agent"}</h1>
           <div className={s.meta}>
             {agent.publishedVersion === null ? (
@@ -126,11 +235,16 @@ function EditorFrame({ children }: { children: React.ReactNode }) {
             <span className={s.save} data-state={save} title={saveError ?? undefined}>
               {SAVE_LABEL[save]}
             </span>
-            {save === "error" && (
-              <button className={btn("quiet", true)} onClick={() => void flush()}>
-                Try again
-              </button>
-            )}
+            {save === "error" &&
+              (saveConflict ? (
+                <button className={btn("quiet", true)} onClick={() => window.location.reload()}>
+                  Reload
+                </button>
+              ) : (
+                <button className={btn("quiet", true)} onClick={() => void flush()}>
+                  Try again
+                </button>
+              ))}
           </div>
         </div>
         <button
@@ -146,6 +260,8 @@ function EditorFrame({ children }: { children: React.ReactNode }) {
           Publish
         </button>
       </header>
+
+      {save === "error" && saveError && <Notice error>{saveError}</Notice>}
 
       <div className={s.body}>
         <nav className={s.panels} aria-label="Agent settings">
@@ -163,7 +279,10 @@ function EditorFrame({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className={s.content}>{children}</div>
+        <div className={s.content}>
+          {children}
+          <PanelPager base={base} current={current ?? ""} />
+        </div>
 
         <aside className={s.try} aria-label={`Talk to ${draft.name}`}>
           <Stage
@@ -173,12 +292,14 @@ function EditorFrame({ children }: { children: React.ReactNode }) {
             avatar={draft.avatar}
             framing={draft.framing}
             configStamp={agent.updatedAt}
+            onRuntime={setRuntime}
+            onModeChange={(m) => m === "live" && setTestedAt(agent.updatedAt)}
           />
           <p className={s.tryNote}>You're talking to the draft. Visitors get the published version.</p>
         </aside>
       </div>
 
-      <PublishDialog open={publishing} onClose={() => setPublishing(false)} />
+      <PublishDialog open={publishing} onClose={() => setPublishing(false)} tested={testedAt === agent.updatedAt} />
       {toast && (
         <div className={s.toast} role="status">
           {toast}

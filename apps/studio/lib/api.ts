@@ -1,5 +1,6 @@
 /** Typed client for the platform API. */
 import type {
+  AgentConfig,
   AgentDetail,
   AgentDraft,
   AgentSummary,
@@ -7,7 +8,26 @@ import type {
   CreateSessionResponse,
   KnowledgeDoc,
   KnowledgeSearchResponse,
+  MemoryItem,
 } from "@metaavatar/protocol";
+
+/**
+ * A random id for this browser, so an agent with memory can recognise a returning visitor. It is
+ * not tied to a person: clearing site data gives a new one.
+ */
+export function visitorId(): string | undefined {
+  try {
+    const key = "studio:visitor";
+    let id = window.localStorage.getItem(key);
+    if (!id) {
+      id = `visitor_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
+      window.localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return undefined; // storage blocked: the conversation works, without memory
+  }
+}
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -15,6 +35,12 @@ export interface AvatarFile {
   file: string;
   name: string;
   url: string;
+  /** Where the file is on disk, relative to the project folder. */
+  path: string;
+  source?: string;
+  licence?: string;
+  /** Portrait image of the model, once one has been captured. */
+  thumbnail?: string;
   bytes: number;
   addedAt: string;
 }
@@ -27,6 +53,8 @@ export interface Workspace {
   geminiKeyConfigured: boolean;
   livekitUrl: string;
   dataDir: string | null;
+  /** Folder of .vrm avatar models. */
+  avatarDir: string | null;
   /** Embedding model used for document search, or null when no Gemini key is set. */
   embedModel: string | null;
 }
@@ -43,6 +71,9 @@ export class ApiError extends Error {
 function describe(status: number, code: string): string {
   if (status === 0) return `Can't reach the API at ${API_URL}. Start everything with: make start`;
   if (code === "not_published") return "This agent has no published version yet. Publish it first, or test the draft.";
+  if (code === "conflict")
+    return "This agent was changed somewhere else (another tab or a tool). Reload the page to get the latest version; your last edit here wasn't saved.";
+  if (code === "too_many_requests") return "Too many requests in a short time. Wait a minute and try again.";
   if (code === "not_found") return "That item no longer exists. It may have been deleted.";
   if (code === "invalid_request") return "Some fields aren't valid. Check the highlighted values.";
   if (code === "not_vrm") return "That file isn't a VRM model. Export your character as .vrm and try again.";
@@ -58,6 +89,8 @@ async function request<T>(method: string, path: string, body?: unknown, headers?
   try {
     res = await fetch(`${API_URL}${path}`, {
       method,
+      // Deletes still go out if the page is closing (they may be sent a few seconds late, see Undo).
+      keepalive: method === "DELETE",
       headers: body instanceof Blob ? headers : { "content-type": "application/json", ...headers },
       body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
     });
@@ -77,15 +110,21 @@ export const api = {
   agents: () => request<AgentSummary[]>("GET", "/agents"),
   agent: (id: string) => request<AgentDetail>("GET", `/agents/${id}`),
   createAgent: (template: string, name?: string) => request<AgentDetail>("POST", "/agents", { template, name }),
-  saveDraft: (id: string, draft: AgentDraft) => request<AgentDetail>("PUT", `/agents/${id}/draft`, draft),
+  /** `basedOn` is the agent's `updatedAt` as last seen; the save is refused if it changed since. */
+  saveDraft: (id: string, draft: AgentDraft, basedOn?: string) =>
+    request<AgentDetail>("PUT", `/agents/${id}/draft`, draft, basedOn ? { "x-based-on": basedOn } : undefined),
   publish: (id: string, note: string) => request<AgentDetail>("POST", `/agents/${id}/publish`, { note }),
+  /** Saves the draft as a version without making it live. */
+  saveVersion: (id: string, note: string) => request<AgentDetail>("POST", `/agents/${id}/versions`, { note }),
+  version: (id: string, version: number) => request<AgentConfig>("GET", `/agents/${id}/versions/${version}`),
+  makeLive: (id: string, version: number) => request<AgentDetail>("POST", `/agents/${id}/live/${version}`),
   restore: (id: string, version: number) => request<AgentDetail>("POST", `/agents/${id}/restore/${version}`),
   duplicate: (id: string) => request<AgentDetail>("POST", `/agents/${id}/duplicate`),
   deleteAgent: (id: string) => request<void>("DELETE", `/agents/${id}`),
   avatars: () => request<AvatarFile[]>("GET", "/avatars"),
   uploadAvatar: (file: File) =>
     request<AvatarFile>("POST", "/avatars", file, { "x-filename": encodeURIComponent(file.name) }),
-  deleteAvatar: (file: string) => request<void>("DELETE", `/avatars/${file}`),
+  deleteAvatar: (file: string) => request<void>("DELETE", `/avatars/${encodeURIComponent(file)}`),
   knowledge: () => request<KnowledgeDoc[]>("GET", "/knowledge"),
   uploadDocument: (file: File) =>
     request<KnowledgeDoc>("POST", "/knowledge", file, { "x-filename": encodeURIComponent(file.name) }),
@@ -95,8 +134,21 @@ export const api = {
   deleteDocument: (id: string) => request<void>("DELETE", `/knowledge/${id}`),
   searchKnowledge: (query: string, documentIds?: string[]) =>
     request<KnowledgeSearchResponse>("POST", "/knowledge/search", { query, documentIds, limit: 4 }),
+  memories: (agentId: string, endUser: string) =>
+    request<MemoryItem[]>("GET", `/memory?agentId=${encodeURIComponent(agentId)}&endUser=${encodeURIComponent(endUser)}`),
+  allMemories: (agentId?: string) =>
+    request<MemoryItem[]>("GET", agentId ? `/memory?agentId=${encodeURIComponent(agentId)}` : "/memory"),
+  restoreMemory: (m: MemoryItem) => request<MemoryItem>("POST", "/memory/restore", m),
+  setAvatarThumbnail: (file: string, png: Blob) =>
+    request<AvatarFile>("PUT", `/avatars/${encodeURIComponent(file)}/thumbnail`, png),
+  deleteMemory: (id: string) => request<void>("DELETE", `/memory/${id}`),
+  forgetMe: (agentId: string, endUser: string) =>
+    request<{ removed: number }>(
+      "DELETE",
+      `/memory?agentId=${encodeURIComponent(agentId)}&endUser=${encodeURIComponent(endUser)}`,
+    ),
   session: (agentId: string, version: "draft" | "published") =>
-    request<CreateSessionResponse>("POST", "/sessions", { agentId, version }),
+    request<CreateSessionResponse>("POST", "/sessions", { agentId, version, endUserRef: visitorId() }),
 };
 
 /** "3 minutes ago"-style relative time, in plain words. */

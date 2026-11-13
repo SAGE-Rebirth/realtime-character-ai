@@ -33,7 +33,8 @@ export interface AvatarRenderer {
   setFraming(framing: Framing): void;
 
   setAgentState(state: AgentState): void;
-  setEmotion(emotion: Emotion, intensity?: number): void;
+  /** `holdSec`: how long the expression stays before easing back to neutral (default 4). */
+  setEmotion(emotion: Emotion, intensity?: number, holdSec?: number): void;
   playGesture(gesture: Gesture, intensity?: number): void;
   /** The user barged in: stop gesturing and close the mouth now. */
   interrupt(): void;
@@ -45,6 +46,9 @@ export interface AvatarRenderer {
 
   /** Neural renderers display video the agent publishes; 3D renderers don't implement this. */
   attachAgentVideo?(track: MediaStreamTrack | null): void;
+
+  /** A still picture of the avatar as a PNG data URL (for thumbnails), in the given framing. */
+  capture?(framing?: Framing): string;
 
   /** Development aid: average and worst cost per frame in ms, unaffected by tab throttling. */
   benchmark?(frames: number): { avgMs: number; maxMs: number };

@@ -251,8 +251,9 @@ export class MotionController {
     pose.spine = add(pose.spine, [0.05, 0, 0], listening);
     pose.head = add(pose.head, [0.04 + Math.max(0, Math.sin(t * 1.4)) * 0.04, 0, 0.07], listening);
 
-    // Thinking: look up and aside.
-    pose.head = add(pose.head, [-0.12, 0.18, 0.04], thinking);
+    // Thinking: look up and aside. A "thinking" expression does the same, so the avatar looks
+    // thoughtful on models whose face has no such expression (VRM has none).
+    pose.head = add(pose.head, [-0.12, 0.18, 0.04], this.pondering());
 
     // Speaking: energy-driven head motion plus beat gestures on stressed syllables.
     const e = speechEnergy;
@@ -292,6 +293,11 @@ export class MotionController {
     return { pose, face: this.updateFace(dt) };
   }
 
+  /** How strongly the avatar is "thinking", from the agent's state or a thinking expression. */
+  private pondering(): number {
+    return Math.max(this.stateBlend.thinking, this.emotion === "thinking" ? this.emotionWeight : 0);
+  }
+
   private updateFace(dt: number): FaceState {
     // Blinks every 2-6 s, 150 ms long, occasional double blink.
     this.nextBlink -= dt;
@@ -316,7 +322,7 @@ export class MotionController {
     }
     s.yaw = approach(s.yaw, s.tYaw, dt, 0.03);
     s.pitch = approach(s.pitch, s.tPitch, dt, 0.03);
-    const thinkingLook = this.stateBlend.thinking;
+    const thinkingLook = this.pondering();
     return {
       blink,
       emotion: this.emotion,

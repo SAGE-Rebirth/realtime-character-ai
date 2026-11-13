@@ -17,6 +17,10 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   {
+    label: "Start",
+    items: [{ href: "/", label: "Home", hint: "Where to begin, and what to do next" }],
+  },
+  {
     label: "Build",
     items: [
       { href: "/agents", label: "Agents", hint: "Create characters: persona, voice, look and knowledge" },
@@ -40,6 +44,7 @@ export const NAV: NavGroup[] = [
     label: "Operate",
     items: [
       { href: "/conversations", label: "Conversations", hint: "Transcripts and outcomes of past sessions", phase: 6 },
+      { href: "/memory", label: "Memory", hint: "Everything agents remember about visitors" },
       { href: "/safety", label: "Safety", hint: "Rules every agent follows, and audience settings" },
       { href: "/usage", label: "Usage", hint: "Minutes, quotas and cost", phase: 6 },
     ],
@@ -62,7 +67,7 @@ export const EDITOR_PANELS: EditorPanel[] = [
   { slug: "voice", label: "Voice", hint: "How the agent sounds" },
   { slug: "appearance", label: "Appearance", hint: "Avatar and camera" },
   { slug: "knowledge", label: "Knowledge", hint: "Web search and documents" },
-  { slug: "memory", label: "Memory", hint: "Remembering returning users", phase: 2 },
+  { slug: "memory", label: "Memory", hint: "Remembering returning users" },
   { slug: "tools", label: "Tools", hint: "Actions the agent can take", phase: 3 },
   { slug: "safety", label: "Safety", hint: "Audience and platform rules" },
   { slug: "versions", label: "Versions", hint: "Publish and roll back" },

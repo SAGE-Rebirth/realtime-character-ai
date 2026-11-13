@@ -53,6 +53,9 @@ export class LipSyncAnalyser {
     this.sink = this.ctx.createGain();
     this.sink.connect(this.ctx.destination);
     this.ready = this.loadWorklet();
+    // If the page closes this analyser while the worklet is still loading, the load is aborted.
+    // attach() still sees the failure; this only stops it surfacing as an unhandled rejection.
+    this.ready.catch(() => undefined);
   }
 
   private async loadWorklet(): Promise<void> {

@@ -89,3 +89,79 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+
+/* Versions: actions and details ----------------------------------------------------------------- */
+.versionItem {
+  border-bottom: 1px solid var(--rule);
+}
+.versionItem .version {
+  border-bottom: none;
+  flex-wrap: wrap;
+}
+.versionActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.saveVersion {
+  display: flex;
+  gap: 8px;
+}
+.saveVersion > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.versionDetails {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  background: var(--panel-2);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.versionDetails > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+}
+.versionDetails dt {
+  color: var(--ink-2);
+}
+.versionDetails dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.versionDetails [data-differs="true"] dt {
+  color: var(--warn);
+  font-weight: 600;
+}
+.differs {
+  display: block;
+  color: var(--ink-3);
+}
+@media (max-width: 560px) {
+  .saveVersion {
+    flex-direction: column;
+  }
+}
+
+/* Memory ---------------------------------------------------------------------------------------- */
+.memories {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.memories li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}

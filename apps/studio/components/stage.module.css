@@ -228,3 +228,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Transcript ------------------------------------------------------------------------------------ */
+.transcriptBar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px 0;
+}
+.transcriptBar button {
+  height: 28px;
+  font-size: 12.5px;
+}
+.transcript {
+  margin: 8px 14px 0;
+  padding: 10px 12px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--stage-text);
+}
+.transcript li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 8px;
+}
+.transcript .who {
+  color: var(--stage-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcript li[data-role="user"] {
+  color: var(--stage-muted);
+}

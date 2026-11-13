@@ -73,6 +73,12 @@ export default function KnowledgePanel() {
           checked={draft.groundingSearch}
           onChange={(groundingSearch) => update({ groundingSearch })}
         />
+        {draft.groundingSearch && (
+          <Notice>
+            Web search uses its own share of your Gemini quota. If a conversation ends with an out-of-quota message as
+            soon as it starts, switch this off or use a key with more quota.
+          </Notice>
+        )}
       </Section>
     </>
   );

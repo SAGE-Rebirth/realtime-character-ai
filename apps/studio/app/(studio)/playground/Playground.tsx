@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import Stage, { type StageMode } from "@/components/Stage";
 import { Field, Notice, PageHeader, Section, Segmented, ui } from "@/components/ui";
 import { api } from "@/lib/api";
+import { usePersisted } from "@/lib/usePersisted";
 import s from "./playground.module.css";
 
 const GESTURES: Gesture[] = ["wave", "nod", "shake_head", "shrug", "explain", "point", "celebrate", "think"];
@@ -19,7 +20,15 @@ const label = (x: string) => (x.charAt(0).toUpperCase() + x.slice(1)).replace("_
 export default function Playground() {
   const rtRef = useRef<AvatarRuntime | null>(null);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
+  // Remembered across refreshes: which agent, version, camera and sound mode were chosen.
+  const [saved, setSaved, savedLoaded] = usePersisted<{
+    agentId?: string;
+    version?: "draft" | "published";
+    framing?: Framing;
+    playback?: PlaybackMode;
+  }>("playground", {});
   const [agentId, setAgentId] = useState<string>("");
+  const restoredFor = useRef<string | null>(null);
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [version, setVersion] = useState<"draft" | "published">("published");
   const [framing, setFraming] = useState<Framing>("upper");
@@ -29,14 +38,19 @@ export default function Playground() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!savedLoaded) return;
     api
       .agents()
       .then((list) => {
         setAgents(list);
-        setAgentId((cur) => cur || list[0]?.id || "");
+        const remembered = list.find((a) => a.id === saved.agentId)?.id;
+        setAgentId((cur) => cur || remembered || list[0]?.id || "");
+        if (saved.playback) setPlayback(saved.playback);
       })
       .catch((e: Error) => setError(e.message));
-  }, []);
+    // Runs once, when the remembered choices have been read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedLoaded]);
 
   useEffect(() => {
     if (!agentId) return;
@@ -44,8 +58,11 @@ export default function Playground() {
       .agent(agentId)
       .then((a) => {
         setDetail(a);
-        setFraming(a.draft.framing);
-        setVersion(a.published ? "published" : "draft");
+        // First load of the remembered agent: keep the remembered version and camera.
+        const restore = restoredFor.current === null && saved.agentId === agentId;
+        restoredFor.current = agentId;
+        setFraming((restore && saved.framing) || a.draft.framing);
+        setVersion(restore && saved.version === "draft" ? "draft" : a.published ? "published" : "draft");
       })
       .catch((e: Error) => setError(e.message));
   }, [agentId]);
@@ -54,6 +71,10 @@ export default function Playground() {
     const id = setInterval(() => rtRef.current && setMetrics(rtRef.current.getMetrics()), 250);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (savedLoaded && agentId && restoredFor.current === agentId) setSaved({ agentId, version, framing, playback });
+  }, [savedLoaded, agentId, version, framing, playback, setSaved]);
 
   const cfg = detail ? (version === "published" && detail.published ? detail.published : detail.draft) : null;
   const busy = mode !== "idle";
@@ -101,7 +122,14 @@ export default function Playground() {
                 ))}
               </select>
             </Field>
-            <Field label="Version">
+            <Field
+              label="Version"
+              help={
+                detail?.published && detail.hasUnpublishedChanges
+                  ? "The live version is what visitors get. Your draft has changes that aren't published yet, so the two can look and sound different."
+                  : undefined
+              }
+            >
               <Segmented
                 label="Version"
                 value={version}

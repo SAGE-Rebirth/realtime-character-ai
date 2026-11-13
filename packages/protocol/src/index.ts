@@ -72,6 +72,8 @@ export const AgentConfig = z.object({
   groundingSearch: z.boolean().default(false),
   /** Ids of knowledge-base documents this agent answers from (see KnowledgeDoc). */
   knowledge: z.array(z.string()).max(50).default([]),
+  /** Remember facts about returning visitors between conversations. Never on for the kids audience. */
+  memory: z.boolean().default(false),
 });
 export type AgentConfig = z.infer<typeof AgentConfig>;
 /** What Studio sends when editing: everything except the id, which the API owns. */
@@ -145,8 +147,11 @@ export const LANGUAGES: readonly { code: string; label: string }[] = [
 
 export interface AgentVersionMeta {
   version: number;
+  /** When this version was saved. */
   publishedAt: string;
   note: string;
+  /** The version visitors get. Exactly one version is live once anything has been published. */
+  live: boolean;
 }
 
 export interface AgentSummary {
@@ -155,7 +160,7 @@ export interface AgentSummary {
   role: string;
   voice: string;
   avatar: AvatarRef;
-  /** Latest published version, or null if never published. */
+  /** The live version (what visitors get), or null if nothing is live yet. */
   publishedVersion: number | null;
   /** The draft differs from the latest published version. */
   hasUnpublishedChanges: boolean;
@@ -225,6 +230,27 @@ export interface KnowledgeSearchResponse {
   /** "meaning" used embeddings; "words" fell back to word matching only. */
   mode: "meaning" | "words";
 }
+
+// ---------------------------------------------------------------------------
+// Memory: what an agent remembers about one visitor between conversations
+// ---------------------------------------------------------------------------
+
+export interface MemoryItem {
+  id: string;
+  agentId: string;
+  /** Pseudonymous visitor reference (CreateSessionRequest.endUserRef). */
+  endUser: string;
+  text: string;
+  createdAt: string;
+}
+
+const memoryOwner = { agentId: z.string().min(1).max(100), endUser: z.string().min(1).max(200) };
+export const MemoryAddRequest = z.object({ ...memoryOwner, text: z.string().trim().min(1).max(300) });
+export const MemorySearchRequest = z.object({
+  ...memoryOwner,
+  query: z.string().trim().max(300).default(""),
+  limit: z.number().int().min(1).max(20).default(6),
+});
 
 // ---------------------------------------------------------------------------
 // Data-channel events (worker -> runtime)

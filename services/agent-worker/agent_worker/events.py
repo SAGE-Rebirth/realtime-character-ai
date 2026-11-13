@@ -82,3 +82,8 @@ class EventPublisher:
         """Documents the current answer draws on, as (id, title)."""
         items = [Source(id=i, title=t, kind=Kind.document) for i, t in documents[:8]]
         await self._send(SourcesEvent(v=1, ts=_now_ms(), type="agent.sources", sources=items))
+
+    async def web_sources(self, pages: list[tuple[str, str]]) -> None:
+        """Web pages the current answer draws on, as (title, url)."""
+        items = [Source(id=url, title=title, kind=Kind.web, url=url) for title, url in pages[:8]]
+        await self._send(SourcesEvent(v=1, ts=_now_ms(), type="agent.sources", sources=items))

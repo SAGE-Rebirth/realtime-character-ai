@@ -31,6 +31,29 @@ export interface StageProps {
   variant?: "panel" | "fill";
 }
 
+const PLAYFUL_GESTURES = ["wave", "nod", "shrug", "explain", "point", "celebrate", "think"] as const;
+const PLAYFUL_EMOTIONS = ["happy", "surprised", "relaxed"] as const;
+const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
+
+/** Crops a stage picture to a 3:4 portrait around its centre and shrinks it for use in lists. */
+async function portraitThumbnail(dataUrl: string): Promise<Blob | null> {
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode().catch(() => undefined);
+  if (!img.width) return null;
+  const w = 180;
+  const h = 240;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const srcW = Math.min(img.width, (img.height * w) / h);
+  const srcH = (srcW * h) / w;
+  canvas.getContext("2d")?.drawImage(img, (img.width - srcW) / 2, (img.height - srcH) / 2, srcW, srcH, 0, 0, w, h);
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+const BUILT_IN: AvatarRef = { kind: "procedural", style: "default" };
+
 function describeError(e: unknown): string {
   const name = e instanceof Error ? e.name : "";
   if (name === "NotAllowedError" || name === "SecurityError") {
@@ -73,7 +96,11 @@ export default function Stage({
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [stampAtStart, setStampAtStart] = useState<string | undefined>(undefined);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [copied, setCopied] = useState(false);
   const avatarKey = JSON.stringify(avatar);
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
   const appliedAvatar = useRef<string>("");
   const joinCheck = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,18 +119,26 @@ export default function Stage({
     (async () => {
       const { AvatarRuntime } = await import("@metaavatar/avatar-runtime");
       if (disposed || !canvasRef.current) return;
-      rt = await AvatarRuntime.create({
-        canvas: canvasRef.current,
-        avatar: { kind: "procedural", style: "default" },
-        framing,
-        playbackMode,
-      });
+      // Start with the avatar the agent actually uses. Starting with the built-in character and
+      // swapping afterwards showed the wrong body for a moment on every page load.
+      const wanted = avatarRef.current;
+      const base = { canvas: canvasRef.current, framing, playbackMode };
+      setLoading(wanted.kind === "vrm" ? "Loading avatar…" : "Setting the stage…");
+      try {
+        rt = await AvatarRuntime.create({ ...base, avatar: wanted });
+        appliedAvatar.current = JSON.stringify(wanted);
+      } catch {
+        if (disposed) return;
+        // The model file is missing or broken: show the built-in character and say so.
+        rt = await AvatarRuntime.create({ ...base, avatar: BUILT_IN });
+        appliedAvatar.current = JSON.stringify(wanted);
+        setError("This avatar file couldn't be loaded, so the built-in character is shown. Pick another one under Appearance.");
+      }
       if (disposed) {
         void rt.dispose();
         return;
       }
       rtRef.current = rt;
-      appliedAvatar.current = JSON.stringify({ kind: "procedural", style: "default" });
       if (process.env.NODE_ENV !== "production") (window as unknown as { __avatar?: AvatarRuntime }).__avatar = rt;
       rt.on("sources", setSources);
       rt.on("caption", (c) => {
@@ -111,7 +146,7 @@ export default function Stage({
         if (c.role === "user") setSources([]);
         setCaptions((prev) => {
           const i = prev.findIndex((p) => p.id === c.id);
-          return (i >= 0 ? prev.map((p, j) => (j === i ? c : p)) : [...prev, c]).slice(-20);
+          return (i >= 0 ? prev.map((p, j) => (j === i ? c : p)) : [...prev, c]).slice(-400);
         });
       });
       rt.on("state", setAgentState);
@@ -154,6 +189,30 @@ export default function Stage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarKey, ready]);
 
+  // The first time a model is shown, take a small portrait of it for the avatar lists.
+  useEffect(() => {
+    if (!ready || loading || avatar.kind !== "vrm") return;
+    const url = avatar.url;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void (async () => {
+        const file = (await api.avatars().catch(() => [])).find((a) => a.url === url);
+        const rt = rtRef.current;
+        if (cancelled || !file || file.thumbnail || !rt || appliedAvatar.current !== JSON.stringify(avatar)) return;
+        const shot = rt.capture("portrait");
+        if (!shot) return;
+        const png = await portraitThumbnail(shot);
+        if (png && !cancelled) await api.setAvatarThumbnail(file.file, png).catch(() => undefined);
+      })();
+    }, 1200); // let the pose and hair settle
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // avatarKey captures every field of `avatar`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarKey, ready, loading]);
+
   const start = useCallback(async () => {
     const rt = rtRef.current;
     if (!rt || !agentId) return;
@@ -168,6 +227,11 @@ export default function Stage({
       if (!joined.mic && joined.micError) setError(describeError(joined.micError));
       setStampAtStart(configStamp);
       setMode("live");
+      try {
+        window.localStorage.setItem("studio:talked", "1"); // ticks "Talk to it" on Home
+      } catch {
+        // storage blocked: nothing depends on it
+      }
       if (joinCheck.current) clearTimeout(joinCheck.current);
       joinCheck.current = setTimeout(() => {
         const m = rtRef.current?.getMetrics();
@@ -250,6 +314,14 @@ export default function Stage({
           });
         }}
         onPointerLeave={() => rtRef.current?.setLookTarget(null)}
+        onClick={() => {
+          // Clicking the avatar makes it react: a random gesture, sometimes with an expression.
+          const rt = rtRef.current;
+          if (!rt) return;
+          rt.playGesture(pick(PLAYFUL_GESTURES), 1);
+          if (Math.random() < 0.6) rt.setEmotion(pick(PLAYFUL_EMOTIONS), 0.9);
+        }}
+        title="Click the avatar to see it react"
       >
         <canvas ref={canvasRef} className={s.canvas} aria-label={`${agentName}, animated avatar`} />
         <div className={s.top}>
@@ -295,6 +367,38 @@ export default function Stage({
         <p className={s.error} role="alert">
           {error}
         </p>
+      )}
+
+      {agentId && captions.length > 0 && (
+        <div className={s.transcriptBar}>
+          <button className={s.ghost} aria-expanded={showTranscript} onClick={() => setShowTranscript(!showTranscript)}>
+            {showTranscript ? "Hide transcript" : `Transcript (${captions.length})`}
+          </button>
+          {showTranscript && (
+            <button
+              className={s.ghost}
+              onClick={() => {
+                const text = captions.map((c) => `${c.role === "user" ? "You" : agentName}: ${c.text}`).join("\n");
+                void navigator.clipboard?.writeText(text).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          )}
+        </div>
+      )}
+      {agentId && showTranscript && captions.length > 0 && (
+        <ol className={s.transcript} aria-label="Conversation transcript">
+          {captions.map((c) => (
+            <li key={c.id} data-role={c.role}>
+              <span className={s.who}>{c.role === "user" ? "You" : agentName}</span>
+              <span>{c.text}</span>
+            </li>
+          ))}
+        </ol>
       )}
 
       {agentId && (

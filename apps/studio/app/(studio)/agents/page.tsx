@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Monogram } from "@/components/Monogram";
 import { btn, Field, Notice, PageHeader, Tag, ui } from "@/components/ui";
+import { useUndo } from "@/components/Undo";
 import { api, timeAgo } from "@/lib/api";
 import s from "./agents.module.css";
 
@@ -104,6 +105,8 @@ export default function AgentsPage() {
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const router = useRouter();
+  const offerUndo = useUndo();
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
 
   const load = () =>
     api
@@ -114,6 +117,8 @@ export default function AgentsPage() {
   useEffect(() => {
     document.title = "Agents · MetaAvatar Studio";
     void load();
+    // Home's "New agent" step links here with ?new=1.
+    if (new URLSearchParams(window.location.search).get("new")) setCreating(true);
   }, []);
 
   const duplicate = async (a: AgentSummary) => {
@@ -127,22 +132,24 @@ export default function AgentsPage() {
     }
   };
 
-  const remove = async (a: AgentSummary) => {
-    const live = a.publishedVersion !== null ? " It is published, so anything using it will stop working." : "";
-    if (!window.confirm(`Delete ${a.name} and all its versions?${live} This can't be undone.`)) return;
-    setBusy(a.id);
-    try {
-      await api.deleteAgent(a.id);
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
+  // Deleting hides the agent at once and offers Undo; it is really deleted a few seconds later.
+  const remove = (a: AgentSummary) => {
+    const show = () => setHidden((h) => new Set([...h].filter((id) => id !== a.id)));
+    setHidden((h) => new Set(h).add(a.id));
+    offerUndo({
+      message: `Deleted ${a.name}${a.publishedVersion !== null ? " (it was published)" : ""}`,
+      undo: show,
+      commit: async () => {
+        await api.deleteAgent(a.id);
+        await load();
+        show();
+      },
+      onError: (e) => setError(e.message),
+    });
   };
 
   const needle = filter.trim().toLowerCase();
-  const shown = agents?.filter((a) => !needle || `${a.name} ${a.role} ${a.voice}`.toLowerCase().includes(needle)) ?? [];
+  const shown = agents?.filter((a) => !hidden.has(a.id) && (!needle || `${a.name} ${a.role} ${a.voice}`.toLowerCase().includes(needle))) ?? [];
 
   const voiceCharacter = (v: string) => VOICES.find((x) => x.name === v)?.character;
 

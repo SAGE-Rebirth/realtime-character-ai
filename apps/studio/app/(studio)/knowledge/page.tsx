@@ -7,6 +7,7 @@
 import type { KnowledgeDoc, KnowledgeSearchResponse } from "@metaavatar/protocol";
 import { useEffect, useState } from "react";
 import { btn, Notice, PageHeader, Section, Tag, ui } from "@/components/ui";
+import { useUndo } from "@/components/Undo";
 import { api, timeAgo } from "@/lib/api";
 import { describeDoc, useKnowledge } from "@/lib/knowledge";
 import s from "./knowledge.module.css";
@@ -146,7 +147,8 @@ function AddDocuments({ onAdded }: { onAdded: () => void }) {
   );
 }
 
-function DocRow({ doc, onChange }: { doc: KnowledgeDoc; onChange: () => void }) {
+function DocRow({ doc, onChange, onHide }: { doc: KnowledgeDoc; onChange: () => void; onHide: (hidden: boolean) => void }) {
+  const offerUndo = useUndo();
   const [busy, setBusy] = useState(false);
   const act = async (work: () => Promise<unknown>) => {
     setBusy(true);
@@ -184,9 +186,15 @@ function DocRow({ doc, onChange }: { doc: KnowledgeDoc; onChange: () => void }) 
           className={btn("quiet", true)}
           disabled={busy}
           onClick={() => {
-            if (window.confirm(`Remove "${doc.title}"? Agents that use it will stop answering from it.`)) {
-              void act(() => api.deleteDocument(doc.id));
-            }
+            onHide(true);
+            offerUndo({
+              message: `Removed "${doc.title}". Agents using it stop answering from it.`,
+              undo: () => onHide(false),
+              commit: async () => {
+                await api.deleteDocument(doc.id);
+                onChange();
+              },
+            });
           }}
         >
           Remove
@@ -270,7 +278,9 @@ export default function KnowledgePage() {
   useEffect(() => {
     document.title = "Knowledge · MetaAvatar Studio";
   }, []);
-  const ready = docs?.filter((d) => d.status === "ready").length ?? 0;
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const visible = docs?.filter((d) => !hidden.has(d.id));
+  const ready = visible?.filter((d) => d.status === "ready").length ?? 0;
 
   return (
     <div className={s.page}>
@@ -286,11 +296,16 @@ export default function KnowledgePage() {
           <Section title="Library">
             {error && <Notice error>{error}</Notice>}
             {!docs && !error && <p className={ui.help}>Loading documents…</p>}
-            {docs && docs.length === 0 && <p className={s.empty}>No documents yet. Add a file, a web page or some text above.</p>}
-            {docs && docs.length > 0 && (
+            {visible && visible.length === 0 && <p className={s.empty}>No documents yet. Add a file, a web page or some text above.</p>}
+            {visible && visible.length > 0 && (
               <ul className={s.list}>
-                {docs.map((d) => (
-                  <DocRow key={d.id} doc={d} onChange={() => void refresh()} />
+                {visible.map((d) => (
+                  <DocRow
+                    key={d.id}
+                    doc={d}
+                    onChange={() => void refresh()}
+                    onHide={(h) => setHidden((cur) => new Set(h ? [...cur, d.id] : [...cur].filter((x) => x !== d.id)))}
+                  />
                 ))}
               </ul>
             )}

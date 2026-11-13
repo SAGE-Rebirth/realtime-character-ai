@@ -1,13 +1,22 @@
-# Local dev stack. LiveKit runs in --dev mode (keys devkey/secret), never expose it publicly.
+# Local stack. LiveKit runs in --dev mode (keys devkey/secret), never expose it publicly.
+#
+#   make start    LiveKit here; API, worker and Studio as local processes (fast edit-reload loop)
+#   make docker   everything in containers: LiveKit, API, worker, Studio  (profile "app")
+#
+# Where the data is: agents, documents and memory are files under ./data, and avatar models are
+# under ./assets/avatars. Both folders are mounted into the API container, so the two ways of
+# running share the same data. Postgres, Redis and MinIO (profile "full") are here for the move
+# to a database; nothing reads or writes them yet.
 name: metaavatar
 services:
   livekit:
     image: livekit/livekit-server:v1.12
     command: --dev --bind 0.0.0.0
     ports:
-      - "7880:7880"          # signalling (ws)
-      - "7881:7881"          # WebRTC over TCP
-      - "50000-50100:50000-50100/udp"
+      # Published on this machine only: the dev keys are public knowledge.
+      - "127.0.0.1:7880:7880"          # signalling (ws)
+      - "127.0.0.1:7881:7881"          # WebRTC over TCP
+      - "127.0.0.1:50000-50100:50000-50100/udp"
     environment:
       LIVEKIT_CONFIG: |
         rtc:
@@ -17,19 +26,64 @@ services:
           node_ip: 127.0.0.1
     restart: unless-stopped
 
+  api:
+    build: { context: ../.., dockerfile: infra/docker/api.Dockerfile }
+    profiles: ["app"]
+    env_file: [{ path: ../../.env, required: false }]
+    environment:
+      API_PORT: "8787"
+      API_HOST: 0.0.0.0   # inside the container; the port below is published on this machine only
+      # Addresses as the browser sees them.
+      API_PUBLIC_URL: http://localhost:8787
+      LIVEKIT_URL: ws://localhost:7880
+      STUDIO_ORIGIN: http://localhost:3100
+      DATA_DIR: /app/data
+      AVATAR_DIR: /app/assets/avatars
+    ports: ["127.0.0.1:8787:8787"]
+    volumes:
+      - ../../data:/app/data
+      - ../../assets/avatars:/app/assets/avatars
+    restart: unless-stopped
+
+  worker:
+    build: { context: ../.., dockerfile: infra/docker/worker.Dockerfile }
+    profiles: ["app"]
+    env_file: [{ path: ../../.env, required: false }]
+    environment:
+      # LiveKit tells peers to send media to 127.0.0.1 (see node_ip above), which is right for a
+      # browser on this machine. The worker shares LiveKit's network so that address reaches it too.
+      LIVEKIT_URL: ws://127.0.0.1:7880
+      PLATFORM_API_URL: http://api:8787
+    network_mode: "service:livekit"
+    depends_on:
+      livekit: { condition: service_started }
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  studio:
+    build:
+      context: ../..
+      dockerfile: infra/docker/studio.Dockerfile
+      args: { NEXT_PUBLIC_API_URL: http://localhost:8787 }
+    profiles: ["app"]
+    ports: ["127.0.0.1:3100:3100"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: metaavatar
       POSTGRES_PASSWORD: metaavatar
       POSTGRES_DB: metaavatar
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["./data/postgres:/var/lib/postgresql/data"]
     profiles: ["full"]
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
     profiles: ["full"]
 
   minio:
@@ -38,6 +92,6 @@ services:
     environment:
       MINIO_ROOT_USER: metaavatar
       MINIO_ROOT_PASSWORD: metaavatar-dev
-    ports: ["9000:9000", "9001:9001"]
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     volumes: ["./data/minio:/data"]
     profiles: ["full"]

@@ -1,0 +1,5 @@
+{
+  "name": "Mira (pixiv VRM 1.0 sample)",
+  "source": "https://github.com/pixiv/three-vrm/tree/dev/packages/three-vrm/examples/models",
+  "licence": "VRM Public License 1.0, (c) 2022 pixiv Inc. Commercial use, modification and redistribution allowed; credit not required."
+}

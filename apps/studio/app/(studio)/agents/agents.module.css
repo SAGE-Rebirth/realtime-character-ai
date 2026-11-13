@@ -13,7 +13,9 @@
 }
 .row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1.6fr) minmax(0, 0.9fr) auto auto auto;
+  /* Fixed widths for every column but the name, so columns line up from row to row (each row is
+     its own grid, and "auto" columns would size to that row's content). */
+  grid-template-columns: 44px minmax(0, 1fr) 130px 250px 120px 132px;
   align-items: center;
   gap: 18px;
   padding: 14px 18px;
@@ -201,4 +203,16 @@
 .menu button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.status {
+  justify-content: flex-end;
+}
+.updated {
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.actions {
+  justify-content: flex-end;
 }

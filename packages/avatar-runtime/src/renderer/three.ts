@@ -42,8 +42,8 @@ export class ThreeRenderer implements AvatarRenderer {
     this.motion.setState(state);
   }
 
-  setEmotion(emotion: Emotion, intensity?: number): void {
-    this.motion.setEmotion(emotion, intensity);
+  setEmotion(emotion: Emotion, intensity?: number, holdSec?: number): void {
+    this.motion.setEmotion(emotion, intensity, holdSec);
   }
 
   playGesture(gesture: Gesture, intensity?: number): void {
@@ -65,6 +65,16 @@ export class ThreeRenderer implements AvatarRenderer {
     this.avatar.applyFace(face, visemes);
     this.avatar.update(dt);
     this.scene.render();
+  }
+
+  capture(framing: Framing = "portrait"): string {
+    const before = this.scene.getFraming();
+    this.scene.setFraming(framing);
+    this.scene.render();
+    // Read the canvas in the same task as the render, before the browser clears the buffer.
+    const url = this.scene.canvas.toDataURL("image/png");
+    this.scene.setFraming(before);
+    return url;
   }
 
   benchmark(frames = 120): { avgMs: number; maxMs: number } {

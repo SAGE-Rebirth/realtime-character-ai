@@ -8,3 +8,5 @@ export { featuresToVisemes, VisemeSmoother, LoudnessNormaliser } from "./audio/v
 export type { Visemes, AudioFeatures } from "./audio/visemes";
 export { ThreeRenderer } from "./renderer/three";
 export type { AvatarRenderer, RenderFrame, RendererKind } from "./renderer/types";
+export { CuePlanner, cueForSentence } from "./animation/cues";
+export type { Cue } from "./animation/cues";

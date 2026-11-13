@@ -4,6 +4,7 @@
  * neural engine later), so swapping renderers doesn't touch session or audio code.
  */
 import type { AgentState, AvatarEvent, AvatarRef, Emotion, Gesture, Source } from "@metaavatar/protocol";
+import { type Cue, CuePlanner } from "./animation/cues";
 import { LipSyncAnalyser, type PlaybackMode } from "./audio/analyser";
 import { ThreeRenderer } from "./renderer/three";
 import type { AvatarRenderer } from "./renderer/types";
@@ -60,6 +61,7 @@ export class AvatarRuntime {
   private last = performance.now();
   private listeners = new Map<keyof RuntimeEvents, Set<Listener<never>>>();
   private mirror = false;
+  private cues = new CuePlanner();
   private metrics: RuntimeMetrics = {
     fps: 0,
     frameMs: 0,
@@ -86,7 +88,13 @@ export class AvatarRuntime {
 
   static async create(opts: RuntimeOptions): Promise<AvatarRuntime> {
     const rt = new AvatarRuntime(opts);
-    await rt.setAvatar(opts.avatar);
+    try {
+      await rt.setAvatar(opts.avatar);
+    } catch (e) {
+      // Don't leave a renderer and an audio context behind when the model can't be loaded.
+      await rt.dispose();
+      throw e;
+    }
     rt.loop();
     return rt;
   }
@@ -119,8 +127,8 @@ export class AvatarRuntime {
     this.renderer.playGesture(g, intensity);
   }
 
-  setEmotion(e: Emotion, intensity?: number): void {
-    this.renderer.setEmotion(e, intensity);
+  setEmotion(e: Emotion, intensity?: number, holdSec?: number): void {
+    this.renderer.setEmotion(e, intensity, holdSec);
   }
 
   /** Where the user is on screen, [-1, 1] each axis (e.g. from the pointer or face tracking). */
@@ -138,7 +146,10 @@ export class AvatarRuntime {
       onAgentVideo: (track) => this.renderer.attachAgentVideo?.(track),
       onEvent: (ev) => this.handleEvent(ev),
       onAgentState: (s) => this.setAgentState(s),
-      onCaption: (c) => this.emit("caption", c),
+      onCaption: (c) => {
+        this.cueFromCaption(c);
+        this.emit("caption", c);
+      },
       onConnection: (s) => {
         this.metrics.connection = s;
         this.emit("connection", s);
@@ -171,12 +182,15 @@ export class AvatarRuntime {
     const msg = text.trim();
     if (!msg || !this.conn) return;
     await this.conn.sendText(msg);
-    this.emit("caption", { id: `typed-${Date.now()}`, role: "user", text: msg, final: true });
+    const typed: Caption = { id: `typed-${Date.now()}`, role: "user", text: msg, final: true };
+    this.cueFromCaption(typed);
+    this.emit("caption", typed);
   }
 
   async disconnect(): Promise<void> {
     await this.conn?.disconnect();
     this.conn = null;
+    this.cues.reset();
     this.agentAudio.detach();
     this.micAnalyser?.detach();
     this.setAgentState("idle");
@@ -207,6 +221,18 @@ export class AvatarRuntime {
   private async attachMicAnalyser(track: MediaStreamTrack): Promise<void> {
     this.micAnalyser ??= new LipSyncAnalyser("element", 0, this.agentAudio.ctx);
     await this.micAnalyser.attach(track, false);
+  }
+
+  /** Body language that follows the conversation: see animation/cues.ts. */
+  private cueFromCaption(c: Caption): void {
+    const now = performance.now() / 1000;
+    const cues: (Cue | null)[] =
+      c.role === "agent" ? this.cues.onAgentText(c.id, c.text, c.final, now) : c.final ? [this.cues.onUserText(c.text, now)] : [];
+    for (const cue of cues) {
+      if (!cue) continue;
+      if (cue.emotion) this.renderer.setEmotion(cue.emotion, 0.8, cue.hold);
+      if (cue.gesture) this.renderer.playGesture(cue.gesture, 0.9);
+    }
   }
 
   private handleEvent(ev: AvatarEvent): void {
@@ -240,6 +266,8 @@ export class AvatarRuntime {
     if (this.metrics.agentState === s) return;
     this.metrics.agentState = s;
     this.renderer.setAgentState(s);
+    // While the agent works on an answer, show it on the face too (the pose already looks away).
+    if (s === "thinking") this.renderer.setEmotion("thinking", 0.6, 2.5);
     this.emit("state", s);
   }
 
@@ -287,6 +315,11 @@ export class AvatarRuntime {
       this.userSpeechEndedAt = null;
     }
     this.agentSpeaking = agentNowSpeaking;
+  }
+
+  /** A still picture of the avatar (PNG data URL), or null if this renderer can't take one. */
+  capture(framing?: Framing): string | null {
+    return this.renderer.capture?.(framing) ?? null;
   }
 
   /** Development aid: average cost per frame in ms, unaffected by background-tab throttling. */

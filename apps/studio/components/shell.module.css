@@ -147,3 +147,98 @@
     padding: 20px 16px 48px;
   }
 }
+
+/* Back / forward and breadcrumbs ---------------------------------------------------------------- */
+.way {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -12px 0 14px;
+  min-height: 30px;
+}
+.wayButtons {
+  display: flex;
+  gap: 2px;
+}
+.wayButtons button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.wayButtons button:hover {
+  background: var(--panel);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-3);
+  min-width: 0;
+}
+.crumb {
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+}
+.crumb a {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.crumb a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.crumb [aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40ch;
+}
+@media (max-width: 860px) {
+  .way {
+    margin-top: 0;
+  }
+}
+
+/* Undo bar -------------------------------------------------------------------------------------- */
+.undo {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  max-width: calc(100vw - 32px);
+}
+.undo button {
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--paper) 18%, transparent);
+  color: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.undo button:hover {
+  background: color-mix(in srgb, var(--paper) 30%, transparent);
+}

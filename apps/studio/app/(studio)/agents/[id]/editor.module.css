@@ -199,3 +199,75 @@
   gap: 12px;
   max-width: 560px;
 }
+
+/* Previous / next panel ------------------------------------------------------------------------- */
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pagerLink {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  text-decoration: none;
+  font-weight: 600;
+  min-width: 140px;
+}
+.pagerLink[data-next] {
+  text-align: right;
+  align-items: flex-end;
+}
+.pagerLink:hover {
+  border-color: var(--jade);
+}
+.pagerHint {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+/* Readiness checklist in the publish dialog ----------------------------------------------------- */
+.checks {
+  margin: 0;
+  padding: 10px 12px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  background: var(--panel-2);
+  font-size: 13.5px;
+}
+.checks li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.checkMark {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--jade-soft);
+  color: var(--jade);
+  margin-top: 1px;
+}
+.checks li[data-ok="false"] .checkMark {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.checkFix {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}

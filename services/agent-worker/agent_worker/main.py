@@ -10,6 +10,7 @@ Run locally:  uv run python -m agent_worker.main dev
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from collections.abc import Coroutine
@@ -34,8 +35,9 @@ from livekit.plugins import google
 
 from .agent_config import parse_agent_config
 from .events import EventPublisher
-from .gestures import plan_cues
+from .grounding import watch_grounding
 from .knowledge import format_passages, search_documents, unique_sources
+from .memory import Visitor, parse_visitor, recall, remember
 from .protocol_models import AgentConfig, Emotion, Gesture
 from .safety import build_instructions
 from .settings import AGENT_NAME, livekit_proxy, load_settings
@@ -52,13 +54,26 @@ EXPRESS_TOOL_ENABLED = os.environ.get("AVATAR_EXPRESS_TOOL") == "1"
 
 
 class AvatarAgent(Agent):
-    def __init__(self, config: AgentConfig, publisher: EventPublisher) -> None:
+    def __init__(
+        self, config: AgentConfig, publisher: EventPublisher, visitor: Visitor | None = None
+    ) -> None:
         tools: list[Any] = [function_tool(self._express, name="express")] if EXPRESS_TOOL_ENABLED else []
         if config.knowledge:
             tools.append(function_tool(self._search_knowledge_base, name="search_knowledge_base"))
+        # Memory needs both the agent's setting and a visitor to remember (the API sends one only
+        # when memory is allowed for this session).
+        self._visitor = visitor if config.memory else None
+        if self._visitor:
+            tools.append(function_tool(self._remember, name="remember"))
+            tools.append(function_tool(self._recall, name="recall"))
         if config.groundingSearch:
             tools.append(google.tools.GoogleSearch())
-        super().__init__(instructions=build_instructions(config, EXPRESS_TOOL_ENABLED), tools=tools)
+        super().__init__(
+            instructions=build_instructions(
+                config, EXPRESS_TOOL_ENABLED, self._visitor.memories if self._visitor else None
+            ),
+            tools=tools,
+        )
         self._config = config
         self._pub = publisher
 
@@ -86,6 +101,28 @@ class AvatarAgent(Agent):
         if passages:
             await self._pub.sources(unique_sources(passages))
         return format_passages(passages)
+
+    async def _remember(self, fact: str) -> str:
+        """Save one short note about the person you are talking to, for future conversations.
+
+        Args:
+            fact: One short sentence in the third person, for example "Their name is Priya."
+        """
+        assert self._visitor is not None
+        result = await remember(
+            load_settings().platform_api_url, self._config.id, self._visitor.end_user, fact
+        )
+        log.info("remember -> %s", result)
+        return result
+
+    async def _recall(self, query: str) -> str:
+        """Look in your notes about this person from earlier conversations.
+
+        Args:
+            query: A few words about what you want to recall, for example "their project".
+        """
+        assert self._visitor is not None
+        return await recall(load_settings().platform_api_url, self._config.id, self._visitor.end_user, query)
 
 
 def build_model(config: AgentConfig) -> google.realtime.RealtimeModel:
@@ -125,10 +162,18 @@ def build_model(config: AgentConfig) -> google.realtime.RealtimeModel:
     )
 
 
-def user_message_for(error: object) -> str:
+def user_message_for(error: object, web_search: bool = False) -> str:
     """Short, non-technical explanation for the viewer; details stay in the worker log."""
     text = str(getattr(error, "error", error)).lower()
-    if "credit" in text or "quota" in text or "429" in text or "resource_exhausted" in text:
+    quota = "credit" in text or "quota" in text or "429" in text or "resource_exhausted" in text
+    if quota and web_search:
+        # Seen 13 Nov 2026: sessions with Google Search were refused with "quota exceeded" while
+        # sessions without it still worked on the same key, so name the likely cause.
+        return (
+            "The AI service is out of quota for web search right now. Switch off 'Search the web' "
+            "in the agent's Knowledge settings, or try again later or with another Gemini key."
+        )
+    if quota:
         return "The AI service is out of quota right now. Please try again later."
     if "404" in text or "not found" in text or "permission" in text or "api key" in text:
         return "The AI service rejected this app's key or model. Check GEMINI_API_KEY and GEMINI_LIVE_MODEL."
@@ -141,8 +186,12 @@ server = AgentServer(http_proxy=livekit_proxy(load_settings().livekit_url))
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     config = parse_agent_config(ctx.job.metadata)
+    try:
+        visitor = parse_visitor(json.loads(ctx.job.metadata or "{}"))
+    except ValueError:
+        visitor = None
     log.info(
-        "starting session room=%s agent=%s voice=%s language=%s audience=%s search=%s documents=%d",
+        "starting session room=%s agent=%s voice=%s language=%s audience=%s search=%s documents=%d memory=%s",
         ctx.room.name,
         config.id,
         config.voice,
@@ -150,11 +199,13 @@ async def entrypoint(ctx: JobContext) -> None:
         config.audience,
         config.groundingSearch,
         len(config.knowledge or []),
+        f"{len(visitor.memories)} notes" if visitor and config.memory else "off",
     )
 
     await ctx.connect()
     pub = EventPublisher(ctx.room)
-    session: AgentSession = AgentSession(llm=build_model(config))
+    model = build_model(config)
+    session: AgentSession = AgentSession(llm=model)
 
     # asyncio keeps only weak references to tasks, so hold them until they finish.
     background: set[asyncio.Future[Any]] = set()
@@ -163,6 +214,9 @@ async def entrypoint(ctx: JobContext) -> None:
         task = asyncio.ensure_future(coro)
         background.add(task)
         task.add_done_callback(background.discard)
+
+    if config.groundingSearch:
+        watch_grounding(model, lambda pages: fire(pub.web_sources(pages)))
 
     speeches: list[SpeechHandle] = []
 
@@ -195,11 +249,9 @@ async def entrypoint(ctx: JobContext) -> None:
         if not text:
             return
         fire(pub.transcript("agent", text, True))
-        for cue in plan_cues(text):
-            if cue.emotion is not None:
-                fire(pub.emotion(cue.emotion))
-            if cue.gesture is not None:
-                fire(pub.gesture(cue.gesture))
+        # Gestures and expressions for the reply are chosen in the browser from the captions as they
+        # stream (avatar-runtime/src/animation/cues.ts), so they land while the words are spoken.
+        # Choosing them here, from the finished reply, made them arrive after the speech had ended.
 
     @session.on("close")
     def _on_close(ev: CloseEvent) -> None:
@@ -207,9 +259,9 @@ async def entrypoint(ctx: JobContext) -> None:
             return
         log.error("session closed with error: %s", ev.error)
         # Tell the viewer instead of leaving them talking to a silent avatar.
-        fire(pub.warning("ending", user_message_for(ev.error)))
+        fire(pub.warning("ending", user_message_for(ev.error, bool(config.groundingSearch))))
 
-    await session.start(agent=AvatarAgent(config, pub), room=ctx.room)
+    await session.start(agent=AvatarAgent(config, pub, visitor), room=ctx.room)
 
     if config.greeting:
         session.generate_reply(instructions=f"Greet the user warmly. Say something like: {config.greeting}")
