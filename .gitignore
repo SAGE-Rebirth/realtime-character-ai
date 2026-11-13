@@ -16,3 +16,5 @@ infra/docker/data/
 assets/avatars/*.vrm
 !assets/avatars/README.md
 .run/
+evals/results/
+data/

@@ -1,0 +1,201 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin: -8px 0 0;
+}
+
+/* Header ---------------------------------------------------------------------------------------- */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.back {
+  color: var(--ink-2);
+  font-size: 13px;
+  text-decoration: none;
+  width: fit-content;
+}
+.back::before {
+  content: "‹ ";
+}
+.back:hover {
+  color: var(--ink);
+}
+.title {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.save {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.save[data-state="error"] {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+/* Three columns: sub-panels, form, live stage ---------------------------------------------------- */
+.body {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr) minmax(320px, 400px);
+  gap: 28px;
+  align-items: start;
+}
+.panels {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.panelLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-control);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-weight: 500;
+}
+.panelLink:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+.panelLink[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--panel);
+  box-shadow: inset 3px 0 0 var(--jade);
+}
+.panelPhase {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 500;
+}
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.try {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: min(720px, calc(100dvh - 48px));
+}
+.try > :first-child {
+  flex: 1;
+}
+.tryNote {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+@media (max-width: 1240px) {
+  .body {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+  .try {
+    grid-column: 1 / -1;
+    position: static;
+    height: auto;
+    order: -1;
+  }
+}
+@media (max-width: 760px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+  .panels {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 4px;
+  }
+  .panelLink {
+    flex: none;
+  }
+  .panelLink[aria-current="page"] {
+    box-shadow: inset 0 -2px 0 var(--jade);
+  }
+
+}
+
+/* Dialog + toast -------------------------------------------------------------------------------- */
+.dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 24px 64px rgba(15, 18, 26, 0.28);
+}
+.dialog::backdrop {
+  background: rgba(15, 18, 26, 0.45);
+}
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: var(--r-control);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(15, 18, 26, 0.25);
+  animation: rise 180ms ease-out;
+}
+@keyframes rise {
+  from {
+    transform: translate(-50%, 8px);
+    opacity: 0;
+  }
+}
+.missing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 560px;
+}

@@ -1,0 +1,227 @@
+/* Voice picker ---------------------------------------------------------------------------------- */
+.voices {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filters button {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.filters button:hover {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+.filters button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.voiceGrid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+.voice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  background: var(--panel);
+}
+.voice[data-selected="true"] {
+  border-color: var(--jade);
+  box-shadow: inset 0 0 0 1px var(--jade);
+}
+.play {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: none;
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.play:hover:not(:disabled) {
+  background: var(--jade-soft);
+  color: var(--jade);
+}
+.play:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.voiceText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.voiceName {
+  font-weight: 600;
+}
+.voiceChar {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.choose {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--rule-strong);
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.choose:hover {
+  border-color: var(--jade);
+  color: var(--jade);
+}
+.chosen {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jade);
+}
+
+/* Avatar picker --------------------------------------------------------------------------------- */
+.avatars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.avatarGrid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.avatar {
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  background: var(--panel);
+}
+.avatar[data-selected="true"] {
+  border-color: var(--jade);
+  box-shadow: inset 0 0 0 1px var(--jade);
+}
+.avatarMain {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-control);
+}
+.thumb {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 60px;
+  display: grid;
+  place-items: end center;
+  border-radius: 8px;
+  background: radial-gradient(70% 40% at 50% 15%, rgba(255, 240, 220, 0.18), transparent 70%),
+    linear-gradient(180deg, var(--stage-2), var(--stage-1));
+  padding-bottom: 4px;
+}
+.thumbKind {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--stage-muted);
+}
+.avatarText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.avatarName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.avatarDetail {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.avatar[data-selected="true"] .avatarDetail {
+  color: var(--jade);
+  font-weight: 600;
+}
+.remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.remove:hover {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
+.drop {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px;
+  border: 1.5px dashed var(--rule-strong);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+.drop:hover,
+.drop[data-over="true"] {
+  border-color: var(--jade);
+  background: var(--jade-soft);
+}
+.drop:focus-within {
+  box-shadow: var(--focus);
+}
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.dropTitle {
+  font-weight: 600;
+}
+.dropHelp {
+  font-size: 13px;
+  color: var(--ink-2);
+}

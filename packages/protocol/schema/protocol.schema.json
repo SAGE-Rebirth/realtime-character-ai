@@ -29,6 +29,11 @@
           "minLength": 1,
           "maxLength": 80
         },
+        "role": {
+          "default": "",
+          "type": "string",
+          "maxLength": 140
+        },
         "instructions": {
           "type": "string",
           "maxLength": 20000
@@ -103,9 +108,63 @@
             }
           ]
         },
+        "framing": {
+          "default": "upper",
+          "type": "string",
+          "enum": [
+            "portrait",
+            "upper",
+            "full"
+          ],
+          "title": "Framing"
+        },
+        "style": {
+          "default": {
+            "warmth": 0.6,
+            "formality": 0.4,
+            "detail": 0.3,
+            "humor": 0.3
+          },
+          "type": "object",
+          "properties": {
+            "warmth": {
+              "default": 0.6,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "formality": {
+              "default": 0.4,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "detail": {
+              "default": 0.3,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "humor": {
+              "default": 0.3,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "title": "PersonaStyle"
+        },
         "groundingSearch": {
           "default": false,
           "type": "boolean"
+        },
+        "knowledge": {
+          "default": [],
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -338,6 +397,61 @@
             "message"
           ],
           "title": "SessionWarningEvent"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "ts": {
+              "type": "number",
+              "description": "Sender clock, ms since epoch"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent.sources"
+            },
+            "sources": {
+              "maxItems": 8,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "document",
+                      "web"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "kind"
+                ],
+                "title": "Source"
+              }
+            }
+          },
+          "required": [
+            "v",
+            "ts",
+            "type",
+            "sources"
+          ],
+          "title": "SourcesEvent"
         }
       ]
     },
@@ -347,6 +461,14 @@
         "agentId": {
           "type": "string",
           "minLength": 1
+        },
+        "version": {
+          "default": "published",
+          "type": "string",
+          "enum": [
+            "draft",
+            "published"
+          ]
         },
         "endUserRef": {
           "type": "string",

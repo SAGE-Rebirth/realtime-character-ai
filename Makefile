@@ -25,8 +25,8 @@ stop: ## Stop everything (services and Docker)
 	@$(RUN) stop
 
 .PHONY: restart
-restart: ## Stop, then start again
-	@$(RUN) restart
+restart: ## Stop, then start again. One service: make restart s=worker (api|worker|studio)
+	@$(RUN) restart $(s)
 
 .PHONY: status
 status: ## Show what's running and whether setup looks right
@@ -52,10 +52,18 @@ key: ## Test the Gemini key with one tiny request
 	@$(UV_RUN) python -c "from agent_worker.preflight import check_gemini; from agent_worker.settings import load_settings; raise SystemExit(0 if check_gemini(load_settings()) else 1)" && echo "Gemini key works"
 
 .PHONY: install
-install: ## Reinstall dependencies and rebuild the protocol package
+install: hooks ## Reinstall dependencies and rebuild the protocol package
 	pnpm install
 	cd $(WORKER_DIR) && uv sync
 	pnpm --filter @metaavatar/protocol build
+
+.PHONY: hooks
+hooks: ## Turn on the git pre-commit hook (lint + typecheck before each commit)
+	@git config core.hooksPath .githooks && echo "Pre-commit hook on (.githooks/pre-commit)"
+
+.PHONY: voices
+voices: ## Generate the voice sample clips Studio plays (once; ARGS=--force to redo)
+	$(UV_RUN) python $(ROOT)/scripts/voice_previews.py $(ARGS)
 
 .PHONY: protocol
 protocol: ## After changing packages/protocol: rebuild it and regenerate the Python models
@@ -81,6 +89,10 @@ typecheck: _protocol-dist ## Typecheck all TypeScript (API, runtime, Studio, pro
 .PHONY: lint
 lint: ## Lint the Python worker and check its formatting (ruff)
 	cd $(WORKER_DIR) && uv run ruff check . && uv run ruff format --check .
+
+.PHONY: eval
+eval: ## Measure reply time and barge-in against a live agent (needs make start). ARGS="--turns 5"
+	$(UV_RUN) python $(ROOT)/evals/latency.py $(ARGS)
 
 .PHONY: fmt
 fmt: ## Auto-fix lint issues and format the Python worker

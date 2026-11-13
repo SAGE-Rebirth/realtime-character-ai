@@ -39,6 +39,55 @@ hard answer). Never mention the tool or describe your gestures out loud.
 """
 
 
+KNOWLEDGE_GUIDE = """\
+Documents: you have a `search_knowledge_base` tool that searches documents your organisation gave
+you. Before answering any question about facts, products, policies, prices, schedules or anything
+those documents might cover, call it with a short search phrase. Answer from the passages it
+returns and mention the document's name in passing (for example "according to the returns policy").
+If it finds nothing, say you don't have that in your documents instead of guessing. Small talk and
+greetings don't need a search. Never read out passage numbers or mention the tool.
+"""
+
+
+def _band(x: float | None, low: str, mid: str, high: str) -> str:
+    v = 0.5 if x is None else x
+    return low if v < 0.35 else high if v > 0.65 else mid
+
+
+def style_guidance(agent: AgentConfig) -> str:
+    """Turns Studio's personality sliders into plain instructions. Mirrors the slider labels in Studio."""
+    st = agent.style
+    if st is None:
+        return ""
+    lines = [
+        _band(st.warmth, "Be calm and matter-of-fact.", "Be friendly.", "Be warm and encouraging."),
+        _band(
+            st.formality,
+            "Speak casually, like a friend would.",
+            "Use a relaxed but polished tone.",
+            "Speak formally and professionally.",
+        ),
+        _band(
+            st.detail,
+            "Keep replies very short: one or two sentences.",
+            "Keep replies to two or three sentences unless asked for more.",
+            "Give fuller explanations when they help, but stay conversational.",
+        ),
+        _band(
+            st.humor,
+            "Stay serious and avoid jokes.",
+            "A little light humour is fine.",
+            "Be playful; humour is welcome.",
+        ),
+    ]
+    return "Style:\n- " + "\n- ".join(lines)
+
+
+def language_guidance(agent: AgentConfig) -> str:
+    lang = agent.language or "en-US"
+    return f"Speak in the language with code {lang} by default. If the user speaks another language, reply in theirs."
+
+
 def build_instructions(agent: AgentConfig, express_tool: bool = False) -> str:
     audience = agent.audience or AudienceProfile.general
     parts = [
@@ -46,5 +95,14 @@ def build_instructions(agent: AgentConfig, express_tool: bool = False) -> str:
         AUDIENCE_RULES[AudienceProfile(audience)],
         EXPRESSION_GUIDE if express_tool else "",
     ]
-    parts.append(f"Your name is {agent.name}.\nPersona:\n{agent.instructions.strip()}")
+    if agent.knowledge:
+        parts.append(KNOWLEDGE_GUIDE)
+    if agent.groundingSearch:
+        parts.append(
+            "You can search the web. Use it for current events and facts you are unsure of, and say briefly where the answer came from."
+        )
+    role = f" Your role: {agent.role.strip()}." if agent.role else ""
+    parts.append(f"Your name is {agent.name}.{role}\nPersona:\n{agent.instructions.strip()}")
+    parts.append(style_guidance(agent))
+    parts.append(language_guidance(agent))
     return "\n\n".join(p for p in parts if p)

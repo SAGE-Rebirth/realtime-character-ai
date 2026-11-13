@@ -1,19 +1,20 @@
 /**
- * AvatarRuntime: the public entry point. Owns the 3D scene, the avatar, the motion system, the
- * lip-sync analyser and (optionally) a live connection to an agent.
+ * AvatarRuntime: the public entry point. Owns the live connection to an agent, the agent's audio and
+ * lip-sync analysis, and the frame loop. Drawing is delegated to an AvatarRenderer (3D today, our
+ * neural engine later), so swapping renderers doesn't touch session or audio code.
  */
-import type { AgentState, AvatarEvent, AvatarRef, Emotion, Gesture } from "@metaavatar/protocol";
-import { MotionController } from "./animation/motion";
+import type { AgentState, AvatarEvent, AvatarRef, Emotion, Gesture, Source } from "@metaavatar/protocol";
 import { LipSyncAnalyser, type PlaybackMode } from "./audio/analyser";
-import { ProceduralAvatar } from "./avatar/procedural";
-import type { AvatarModel } from "./avatar/types";
-import { VrmAvatar } from "./avatar/vrm";
-import { AvatarScene, type Framing } from "./scene";
+import { ThreeRenderer } from "./renderer/three";
+import type { AvatarRenderer } from "./renderer/types";
+import type { Framing } from "./scene";
 import { AgentConnection, type Caption } from "./session";
 
 export interface RuntimeOptions {
   canvas: HTMLCanvasElement;
   avatar: AvatarRef;
+  /** Defaults to the on-device 3D renderer. */
+  renderer?: AvatarRenderer;
   framing?: Framing;
   playbackMode?: PlaybackMode;
   onLoadProgress?: (fraction: number) => void;
@@ -46,12 +47,12 @@ interface RuntimeEvents {
   error: Error;
   agentPresent: boolean;
   warning: { code: string; message: string };
+  /** Documents or pages the answer being spoken draws on. */
+  sources: Source[];
 }
 
 export class AvatarRuntime {
-  private scene: AvatarScene;
-  private avatar!: AvatarModel;
-  private motion = new MotionController();
+  private renderer: AvatarRenderer;
   private agentAudio: LipSyncAnalyser;
   private micAnalyser: LipSyncAnalyser | null = null;
   private conn: AgentConnection | null = null;
@@ -79,8 +80,7 @@ export class AvatarRuntime {
   private agentSpeaking = false;
 
   private constructor(private opts: RuntimeOptions) {
-    this.scene = new AvatarScene(opts.canvas);
-    this.scene.setFraming(opts.framing ?? "upper");
+    this.renderer = opts.renderer ?? new ThreeRenderer(opts.canvas, opts.framing ?? "upper");
     this.agentAudio = new LipSyncAnalyser(opts.playbackMode ?? "element");
   }
 
@@ -103,40 +103,39 @@ export class AvatarRuntime {
   }
 
   // --- Avatar -------------------------------------------------------------------------------
+  get rendererKind(): AvatarRenderer["kind"] {
+    return this.renderer.kind;
+  }
+
   async setAvatar(ref: AvatarRef): Promise<void> {
-    const next =
-      ref.kind === "vrm"
-        ? await VrmAvatar.load(ref.url, this.scene.camera, this.opts.onLoadProgress)
-        : new ProceduralAvatar();
-    this.avatar?.dispose();
-    this.avatar = next;
-    this.scene.scene.add(next.root);
-    this.scene.setSubjectEyeHeight(next.eyeHeight);
+    await this.renderer.setAvatar(ref, this.opts.onLoadProgress);
   }
 
   setFraming(f: Framing): void {
-    this.scene.setFraming(f);
+    this.renderer.setFraming(f);
   }
 
   playGesture(g: Gesture, intensity?: number): void {
-    this.motion.playGesture(g, intensity);
+    this.renderer.playGesture(g, intensity);
   }
 
   setEmotion(e: Emotion, intensity?: number): void {
-    this.motion.setEmotion(e, intensity);
+    this.renderer.setEmotion(e, intensity);
   }
 
   /** Where the user is on screen, [-1, 1] each axis (e.g. from the pointer or face tracking). */
   setLookTarget(t: { x: number; y: number } | null): void {
-    this.motion.lookTarget = t;
+    this.renderer.setLookTarget(t);
   }
 
   // --- Live session ---------------------------------------------------------------------------
-  async connect(url: string, token: string): Promise<void> {
+  /** Joins the agent's room. If the microphone can't be used, stays connected with `mic: false`. */
+  async connect(url: string, token: string): Promise<{ mic: boolean; micError?: Error }> {
     await this.agentAudio.resume();
     this.conn = new AgentConnection({
       onAgentAudio: (track) => void this.agentAudio.attach(track, true),
       onAgentAudioEnded: () => this.agentAudio.detach(),
+      onAgentVideo: (track) => this.renderer.attachAgentVideo?.(track),
       onEvent: (ev) => this.handleEvent(ev),
       onAgentState: (s) => this.setAgentState(s),
       onCaption: (c) => this.emit("caption", c),
@@ -150,8 +149,14 @@ export class AvatarRuntime {
       },
     });
     await this.conn.connect(url, token);
-    const micTrack = await this.conn.setMicEnabled(true);
-    if (micTrack) await this.attachMicAnalyser(micTrack);
+    try {
+      const micTrack = await this.conn.setMicEnabled(true);
+      if (micTrack) await this.attachMicAnalyser(micTrack);
+      return { mic: true };
+    } catch (e) {
+      // Stay in the conversation without a mic: the user can still listen and type.
+      return { mic: false, micError: e instanceof Error ? e : new Error(String(e)) };
+    }
   }
 
   async setMicEnabled(on: boolean): Promise<void> {
@@ -159,6 +164,14 @@ export class AvatarRuntime {
     const track = await this.conn.setMicEnabled(on);
     if (track) await this.attachMicAnalyser(track);
     else this.micAnalyser?.detach();
+  }
+
+  /** Type to the agent instead of speaking. The message also appears as a user caption. */
+  async sendText(text: string): Promise<void> {
+    const msg = text.trim();
+    if (!msg || !this.conn) return;
+    await this.conn.sendText(msg);
+    this.emit("caption", { id: `typed-${Date.now()}`, role: "user", text: msg, final: true });
   }
 
   async disconnect(): Promise<void> {
@@ -203,17 +216,20 @@ export class AvatarRuntime {
         this.setAgentState(ev.state);
         break;
       case "agent.emotion":
-        this.motion.setEmotion(ev.emotion, ev.intensity);
+        this.renderer.setEmotion(ev.emotion, ev.intensity);
         break;
       case "agent.gesture":
-        this.motion.playGesture(ev.gesture, ev.intensity);
+        this.renderer.playGesture(ev.gesture, ev.intensity);
         break;
       case "session.warning":
         this.emit("warning", { code: ev.code, message: ev.message });
         break;
+      case "agent.sources":
+        this.emit("sources", ev.sources);
+        break;
       case "agent.flush":
         this.agentAudio.flush();
-        this.motion.interrupt();
+        this.renderer.interrupt();
         break;
       default:
         break;
@@ -223,7 +239,7 @@ export class AvatarRuntime {
   private setAgentState(s: AgentState): void {
     if (this.metrics.agentState === s) return;
     this.metrics.agentState = s;
-    this.motion.setState(s);
+    this.renderer.setAgentState(s);
     this.emit("state", s);
   }
 
@@ -240,11 +256,7 @@ export class AvatarRuntime {
     this.trackLatency(now, energy, dt);
     this.metrics.micLevel = this.mirror ? energy : (this.micAnalyser?.energy ?? 0);
 
-    const { pose, face } = this.motion.update(dt, energy);
-    this.avatar.applyPose(pose);
-    this.avatar.applyFace(face, visemes);
-    this.avatar.update(dt);
-    this.scene.render();
+    this.renderer.render({ dt, visemes, energy });
 
     this.metrics.frameMs = this.metrics.frameMs * 0.9 + (performance.now() - t0) * 0.1;
     this.fpsFrames++;
@@ -277,24 +289,9 @@ export class AvatarRuntime {
     this.agentSpeaking = agentNowSpeaking;
   }
 
-  /**
-   * Development aid: renders `frames` frames back to back and waits for the GPU, returning the
-   * average cost per frame in ms. Unaffected by background-tab throttling.
-   */
-  benchmark(frames = 120): { avgMs: number; maxMs: number } {
-    const gl = this.scene.renderer.getContext();
-    const times: number[] = [];
-    for (let i = 0; i < frames; i++) {
-      const t0 = performance.now();
-      const { pose, face } = this.motion.update(1 / 60, 0.5);
-      this.avatar.applyPose(pose);
-      this.avatar.applyFace(face, this.agentAudio.update(1 / 60));
-      this.avatar.update(1 / 60);
-      this.scene.render();
-      gl.finish();
-      times.push(performance.now() - t0);
-    }
-    return { avgMs: times.reduce((a, b) => a + b, 0) / times.length, maxMs: Math.max(...times) };
+  /** Development aid: average cost per frame in ms, unaffected by background-tab throttling. */
+  benchmark(frames = 120): { avgMs: number; maxMs: number } | null {
+    return this.renderer.benchmark?.(frames) ?? null;
   }
 
   getMetrics(): RuntimeMetrics {
@@ -304,9 +301,8 @@ export class AvatarRuntime {
   async dispose(): Promise<void> {
     cancelAnimationFrame(this.raf);
     await this.disconnect().catch(() => undefined);
-    this.avatar.dispose();
     await this.micAnalyser?.dispose();
     await this.agentAudio.dispose();
-    this.scene.dispose();
+    this.renderer.dispose();
   }
 }

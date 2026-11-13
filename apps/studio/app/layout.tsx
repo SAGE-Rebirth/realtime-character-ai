@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/schibsted-grotesk";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MetaAvatar Studio",
-  description: "Real-time conversational avatars powered by Gemini Live",
+  title: { default: "MetaAvatar Studio", template: "%s · MetaAvatar Studio" },
+  description: "Build real-time talking characters powered by Gemini Live",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fast checks before every commit: Python lint + format, and TypeScript typecheck.
+# Installed by `make hooks` (or `make install`). Skip once with: git commit --no-verify
+set -e
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-commit: lint and typecheck (skip with --no-verify)…"
+make --no-print-directory lint typecheck >/dev/null 2>&1 || {
+  echo "pre-commit: checks failed. Run 'make lint typecheck' to see why ('make fmt' fixes formatting)."
+  exit 1
+}

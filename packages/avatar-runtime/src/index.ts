@@ -6,3 +6,5 @@ export type { PlaybackMode } from "./audio/analyser";
 export { MotionController, BONES } from "./animation/motion";
 export { featuresToVisemes, VisemeSmoother, LoudnessNormaliser } from "./audio/visemes";
 export type { Visemes, AudioFeatures } from "./audio/visemes";
+export { ThreeRenderer } from "./renderer/three";
+export type { AvatarRenderer, RenderFrame, RendererKind } from "./renderer/types";

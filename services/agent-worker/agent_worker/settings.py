@@ -23,6 +23,7 @@ class Settings:
     livekit_url: str
     livekit_api_key: str
     livekit_api_secret: str
+    platform_api_url: str
 
 
 def load_settings() -> Settings:
@@ -39,6 +40,9 @@ def load_settings() -> Settings:
         livekit_url=os.environ.get("LIVEKIT_URL", "ws://localhost:7880"),
         livekit_api_key=os.environ.get("LIVEKIT_API_KEY", "devkey"),
         livekit_api_secret=os.environ.get("LIVEKIT_API_SECRET", "secret"),
+        # Where the worker reaches the platform API (knowledge-base search).
+        platform_api_url=os.environ.get("PLATFORM_API_URL")
+        or f"http://localhost:{os.environ.get('API_PORT', '8787')}",
     )
 
 

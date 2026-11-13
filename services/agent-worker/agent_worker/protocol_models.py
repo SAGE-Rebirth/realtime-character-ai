@@ -33,9 +33,23 @@ class ProceduralAvatarRef(BaseModel):
     style: Style | None = 'default'
 
 
+class Framing(StrEnum):
+    portrait = 'portrait'
+    upper = 'upper'
+    full = 'full'
+
+
+class PersonaStyle(BaseModel):
+    warmth: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.6
+    formality: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.4
+    detail: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.3
+    humor: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.3
+
+
 class AgentConfig(BaseModel):
     id: Annotated[str, Field(min_length=1)]
     name: Annotated[str, Field(max_length=80, min_length=1)]
+    role: Annotated[str | None, Field(max_length=140)] = ''
     instructions: Annotated[str, Field(max_length=20000)]
     greeting: Annotated[str | None, Field(max_length=500)] = None
     voice: str | None = 'Kore'
@@ -45,7 +59,12 @@ class AgentConfig(BaseModel):
     )
     renderer: Renderer | None = '3d'
     avatar: VrmAvatarRef | ProceduralAvatarRef
+    framing: Annotated[Framing | None, Field(title='Framing')] = 'upper'
+    style: Annotated[
+        PersonaStyle | None, Field(title='PersonaStyle', validate_default=True)
+    ] = {'warmth': 0.6, 'formality': 0.4, 'detail': 0.3, 'humor': 0.3}
     groundingSearch: bool | None = False
+    knowledge: Annotated[list[str] | None, Field(max_length=50)] = []
 
 
 class AgentState(StrEnum):
@@ -136,6 +155,25 @@ class SessionWarningEvent(BaseModel):
     message: str
 
 
+class Kind(StrEnum):
+    document = 'document'
+    web = 'web'
+
+
+class Source(BaseModel):
+    id: str
+    title: str
+    kind: Kind
+    url: str | None = None
+
+
+class SourcesEvent(BaseModel):
+    v: Literal[1]
+    ts: Annotated[float, Field(description='Sender clock, ms since epoch')]
+    type: Literal['agent.sources']
+    sources: Annotated[list[Source], Field(max_length=8)]
+
+
 class AvatarEvent(
     RootModel[
         AgentStateEvent
@@ -144,6 +182,7 @@ class AvatarEvent(
         | FlushEvent
         | TranscriptEvent
         | SessionWarningEvent
+        | SourcesEvent
     ]
 ):
     root: (
@@ -153,11 +192,18 @@ class AvatarEvent(
         | FlushEvent
         | TranscriptEvent
         | SessionWarningEvent
+        | SourcesEvent
     )
+
+
+class Version(StrEnum):
+    draft = 'draft'
+    published = 'published'
 
 
 class CreateSessionRequest(BaseModel):
     agentId: Annotated[str, Field(min_length=1)]
+    version: Version | None = 'published'
     endUserRef: Annotated[str | None, Field(max_length=200)] = None
 
 

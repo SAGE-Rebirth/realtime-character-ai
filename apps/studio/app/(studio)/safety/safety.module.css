@@ -1,0 +1,31 @@
+.page {
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.page > header {
+  margin-bottom: 6px;
+}
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+.list li {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.list strong {
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .list li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

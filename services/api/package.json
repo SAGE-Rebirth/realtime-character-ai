@@ -13,7 +13,9 @@
     "@hono/node-server": "^1.19.0",
     "@metaavatar/protocol": "workspace:*",
     "hono": "^4.9.0",
-    "livekit-server-sdk": "^2.13.0"
+    "livekit-server-sdk": "^2.13.0",
+    "mammoth": "^1.13.0",
+    "unpdf": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

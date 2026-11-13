@@ -1,0 +1,83 @@
+.page {
+  max-width: 1320px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: start;
+}
+.stage {
+  position: sticky;
+  top: 24px;
+  height: min(760px, calc(100dvh - 48px));
+  display: flex;
+}
+.stage > * {
+  flex: 1;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.hud {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.hud dt {
+  color: var(--ink-2);
+}
+.hud dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+.hud dd[data-bad="true"] {
+  color: var(--bad);
+}
+.meter {
+  display: inline-block;
+  width: 96px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  overflow: hidden;
+  vertical-align: middle;
+}
+.meter span {
+  display: block;
+  height: 100%;
+  background: var(--jade);
+  transition: width 80ms linear;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chips button {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 15px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  font-size: 13px;
+  cursor: pointer;
+}
+.chips button:hover {
+  border-color: var(--jade);
+  color: var(--jade);
+}
+@media (max-width: 1060px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .stage {
+    position: static;
+    height: 520px;
+  }
+}

@@ -1,0 +1,204 @@
+.page {
+  max-width: 1080px;
+}
+
+/* Cast list ------------------------------------------------------------------------------------- */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-panel);
+}
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.6fr) minmax(0, 0.9fr) auto auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+}
+.row + .row {
+  border-top: 1px solid var(--rule);
+}
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.name {
+  font-size: 16px;
+  font-weight: 650;
+  text-decoration: none;
+  letter-spacing: -0.005em;
+}
+.name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.role {
+  color: var(--ink-2);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.voice {
+  display: flex;
+  flex-direction: column;
+  font-weight: 550;
+}
+.voiceChar {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+.status {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.updated {
+  color: var(--ink-3);
+  font-size: 13px;
+  white-space: nowrap;
+}
+@media (max-width: 860px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .voice,
+  .updated {
+    display: none;
+  }
+  .status {
+    grid-column: 2 / 3;
+  }
+}
+
+.empty {
+  padding: 48px 24px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--r-panel);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* New agent dialog ------------------------------------------------------------------------------ */
+.dialog {
+  width: min(560px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-panel);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 24px 64px rgba(15, 18, 26, 0.28);
+}
+.dialog::backdrop {
+  background: rgba(15, 18, 26, 0.45);
+}
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+}
+.templates {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.templates legend {
+  margin-bottom: 8px;
+}
+.template {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+.template[data-checked="true"] {
+  border-color: var(--jade);
+  background: var(--jade-soft);
+}
+.template input {
+  grid-row: span 2;
+  margin: 3px 0 0;
+  accent-color: var(--jade);
+}
+.templateTitle {
+  font-weight: 600;
+}
+.templateSummary {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Search and row actions ------------------------------------------------------------------------ */
+.search {
+  max-width: 360px;
+  margin-bottom: 14px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.more {
+  position: relative;
+}
+.more > summary {
+  list-style: none;
+}
+.more > summary::-webkit-details-marker {
+  display: none;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  min-width: 150px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.menu button {
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+.menu button[data-danger] {
+  color: var(--bad);
+}
+.menu button[data-danger]:hover:not(:disabled) {
+  background: var(--bad-soft);
+}
+.menu button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

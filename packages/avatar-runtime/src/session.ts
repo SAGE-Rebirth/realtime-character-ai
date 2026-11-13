@@ -21,6 +21,8 @@ export interface Caption {
 export interface SessionHandlers {
   onAgentAudio(track: MediaStreamTrack): void;
   onAgentAudioEnded(): void;
+  /** Video the agent publishes (neural renderer); null when it stops. */
+  onAgentVideo(track: MediaStreamTrack | null): void;
   onEvent(ev: AvatarEvent): void;
   onAgentState(state: AgentState): void;
   onCaption(c: Caption): void;
@@ -30,6 +32,8 @@ export interface SessionHandlers {
 
 const AGENT_STATE_ATTR = "lk.agent.state";
 const TRANSCRIPTION_TOPIC = "lk.transcription";
+/** LiveKit Agents reads typed user messages from this topic. */
+const CHAT_TOPIC = "lk.chat";
 
 export class AgentConnection {
   readonly room = new Room({ adaptiveStream: true, dynacast: true });
@@ -37,10 +41,14 @@ export class AgentConnection {
   constructor(private h: SessionHandlers) {
     const r = this.room;
     r.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, p: RemoteParticipant) => {
-      if (track.kind === Track.Kind.Audio && this.isAgent(p)) this.h.onAgentAudio(track.mediaStreamTrack);
+      if (!this.isAgent(p)) return;
+      if (track.kind === Track.Kind.Audio) this.h.onAgentAudio(track.mediaStreamTrack);
+      if (track.kind === Track.Kind.Video) this.h.onAgentVideo(track.mediaStreamTrack);
     });
     r.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, _pub, p: RemoteParticipant) => {
-      if (track.kind === Track.Kind.Audio && this.isAgent(p)) this.h.onAgentAudioEnded();
+      if (!this.isAgent(p)) return;
+      if (track.kind === Track.Kind.Audio) this.h.onAgentAudioEnded();
+      if (track.kind === Track.Kind.Video) this.h.onAgentVideo(null);
     });
     r.on(RoomEvent.DataReceived, (payload, _p, _kind, topic) => {
       if (topic !== AVATAR_TOPIC) return;
@@ -101,6 +109,11 @@ export class AgentConnection {
     });
     const pub = this.room.localParticipant.getTrackPublication(Track.Source.Microphone);
     return on ? (pub?.track?.mediaStreamTrack ?? null) : null;
+  }
+
+  /** Send a typed message to the agent (text fallback when the mic isn't usable). */
+  async sendText(text: string): Promise<void> {
+    await this.room.localParticipant.sendText(text, { topic: CHAT_TOPIC });
   }
 
   async disconnect(): Promise<void> {

@@ -91,20 +91,28 @@ export class AvatarScene {
     return this.framing;
   }
 
+  /**
+   * Each framing names the region it must show (in metres, for a 1.55 m eye height); the camera
+   * distance is solved from the field of view and the canvas aspect so the shot holds on any screen,
+   * from a phone to a tall side panel.
+   */
   private applyFraming(): void {
     const eye = this.eyeHeight;
     const scale = eye / 1.55;
     const aspect = this.camera.aspect || 1;
-    // Narrow (phone) screens need the camera further back to keep shoulders in view.
-    const narrow = aspect < 0.8 ? 1.35 : 1;
-    const shots: Record<Framing, { y: number; dist: number; look: number }> = {
-      portrait: { y: eye + 0.02, dist: 1.05, look: eye - 0.06 },
-      upper: { y: eye - 0.05, dist: 2.45, look: eye - 0.3 },
-      full: { y: eye * 0.62, dist: 4.4, look: eye * 0.55 },
+    const shots: Record<Framing, { center: number; height: number; width: number; tilt: number }> = {
+      portrait: { center: eye - 0.08, height: 0.5, width: 0.42, tilt: 0.03 },
+      upper: { center: eye - 0.4, height: 1.05, width: 0.6, tilt: 0.12 },
+      full: { center: eye * 0.55, height: 2.05, width: 0.8, tilt: 0.2 },
     };
     const s = shots[this.framing];
-    this.camera.position.set(0, s.y, s.dist * scale * narrow);
-    this.camera.lookAt(0, s.look, 0);
+    const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const hHalf = Math.atan(Math.tan(vHalf) * aspect);
+    const dist =
+      Math.max((s.height * scale) / 2 / Math.tan(vHalf), (s.width * scale) / 2 / Math.tan(hHalf)) + 0.15 * scale;
+    // A camera slightly above the target looks down a touch, which flatters faces.
+    this.camera.position.set(0, s.center + s.tilt * scale, dist);
+    this.camera.lookAt(0, s.center, 0);
   }
 
   private resize(): void {

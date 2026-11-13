@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the MetaAvatar dev stack in the background. Called by the Makefile:
-#   run.sh start | stop | restart | status | logs [service]
+#   run.sh start | stop | restart [service] | status | logs [service]
 # Each service runs in its own process group, so stopping it also stops every child it spawned.
 # Logs and PID files live in .run/ (git-ignored).
 set -uo pipefail
@@ -170,6 +170,22 @@ stop() {
   fi
 }
 
+# Restart one service and leave the rest running. The worker is the usual case: the API and Studio
+# reload on file changes, the worker does not.
+restart_one() {
+  local svc="$1" pid
+  case "$svc" in api | worker | studio) ;; *) echo "usage: make restart s=api|worker|studio"; exit 2 ;; esac
+  ensure_setup
+  mkdir -p "$RUN"
+  say "Restarting $svc…"
+  pid="$(pid_of "$svc")"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then stop_group "$pid"; fi
+  rm -f "$RUN/$svc.pid"
+  if [ "$svc" = worker ]; then pkill -f "agent_worker.main" 2>/dev/null; sleep 1; fi
+  start_service "$svc" || exit 1
+  wait_ready "$svc"
+}
+
 # --- Status --------------------------------------------------------------------------------
 status() {
   say "Services"
@@ -220,8 +236,8 @@ case "${1:-}" in
   start) start ;;
   dev) dev ;;
   stop) stop ;;
-  restart) stop && start ;;
+  restart) if [ -n "${2:-}" ]; then restart_one "$2"; else stop && start; fi ;;
   status) status ;;
   logs) logs "${2:-}" ;;
-  *) echo "usage: run.sh start|dev|stop|restart|status|logs [api|worker|studio|livekit]"; exit 2 ;;
+  *) echo "usage: run.sh start|dev|stop|restart [api|worker|studio]|status|logs [api|worker|studio|livekit]"; exit 2 ;;
 esac

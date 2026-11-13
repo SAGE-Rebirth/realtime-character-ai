@@ -1,0 +1,149 @@
+.app {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.skip {
+  position: absolute;
+  left: -999px;
+  top: 8px;
+  z-index: 50;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-radius: var(--r-control);
+}
+.skip:focus {
+  left: 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.brandSub {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* Left rail ------------------------------------------------------------------------------------- */
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 12px;
+  border-right: 1px solid var(--rule);
+}
+.railBrand {
+  padding: 2px 8px 6px;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.groupLabel {
+  padding: 0 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-control);
+  text-decoration: none;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.link:hover {
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--ink);
+}
+.link[aria-current="page"] {
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--jade);
+}
+.link > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phase {
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.railFoot {
+  margin-top: auto;
+}
+
+.main {
+  min-width: 0;
+  padding: 32px 40px 64px;
+}
+
+/* Small screens: the rail becomes a top bar with a menu ----------------------------------------- */
+.topbar {
+  display: none;
+}
+.menuBtn {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  font-weight: 550;
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 16px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+  }
+  .rail {
+    display: none;
+    position: fixed;
+    inset: 55px 0 0 0;
+    z-index: 19;
+    height: auto;
+    background: var(--paper);
+    border-right: none;
+  }
+  .rail[data-open="true"] {
+    display: flex;
+  }
+  .railBrand {
+    display: none;
+  }
+  .main {
+    padding: 20px 16px 48px;
+  }
+}

@@ -1,42 +1,119 @@
+/*
+ * MetaAvatar Studio visual system.
+ * Quiet, cool workspace (paper + ink) around one bold element: the lit stage where avatars perform.
+ * Jade marks actions; on-air red is reserved for "live".
+ */
 :root {
-  --bg: #f4f2ee;
-  --surface: #ffffff;
-  --surface-2: #ece9e3;
-  --text: #1c1b1f;
-  --muted: #6a6670;
-  --border: #dcd8d0;
-  --accent: #3d5afe;
-  --accent-text: #ffffff;
-  --good: #1a7f4b;
-  --warn: #a35a00;
-  --bad: #b3261e;
-  --stage-top: #e9e4ff;
-  --stage-bottom: #fbe9df;
+  --paper: #edf0f2;
+  --panel: #ffffff;
+  --panel-2: #f5f7f8;
+  --ink: #1e2230;
+  --ink-2: #545b6b;
+  --ink-3: #848b98;
+  --rule: #d7dce2;
+  --rule-strong: #c3c9d1;
+  --jade: #0e7c66;
+  --jade-hover: #0b6955;
+  --jade-ink: #ffffff;
+  --jade-soft: #dcefe9;
+  --onair: #e5484d;
+  --warn: #a8590a;
+  --warn-soft: #fbeedd;
+  --bad: #c2312c;
+  --bad-soft: #fbe3e2;
+
+  /* The stage is always dark, in both themes: avatars are lit like performers. */
+  --stage-1: #171a23;
+  --stage-2: #262b39;
+  --stage-light: rgba(255, 232, 200, 0.16);
+  --stage-text: #eef0f4;
+  --stage-muted: #a4abb9;
+
+  --r-control: 8px;
+  --r-panel: 14px;
+  --r-stage: 20px;
+  --focus: 0 0 0 3px color-mix(in srgb, var(--jade) 35%, transparent);
+
+  --font: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: light;
 }
+
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #121216;
-    --surface: #1b1b21;
-    --surface-2: #26262e;
-    --text: #ecebf0;
-    --muted: #a3a1ab;
-    --border: #33333d;
-    --accent: #7c8cff;
-    --accent-text: #0d0d12;
-    --good: #5fd39a;
+    --paper: #13161b;
+    --panel: #1a1e25;
+    --panel-2: #21262f;
+    --ink: #e7eaee;
+    --ink-2: #a6adb9;
+    --ink-3: #737b89;
+    --rule: #2b313b;
+    --rule-strong: #3a414d;
+    --jade: #3cc4a5;
+    --jade-hover: #55d3b6;
+    --jade-ink: #06281f;
+    --jade-soft: rgba(60, 196, 165, 0.14);
+    --onair: #ff6369;
     --warn: #f0b45a;
+    --warn-soft: rgba(240, 180, 90, 0.12);
     --bad: #ff8a80;
-    --stage-top: #23214a;
-    --stage-bottom: #3a2630;
+    --bad-soft: rgba(255, 138, 128, 0.12);
+    --stage-1: #0e1015;
+    --stage-2: #1f2430;
     color-scheme: dark;
   }
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
-body {
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+* {
+  box-sizing: border-box;
 }
-button, select { font: inherit; }
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--font);
+  font-feature-settings: "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: inherit;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  overflow-wrap: anywhere;
+}
+::selection {
+  background: var(--jade-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

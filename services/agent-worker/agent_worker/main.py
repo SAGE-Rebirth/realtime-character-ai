@@ -12,7 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Literal
+from collections.abc import Coroutine
+from typing import Any, Literal
 
 from google.genai import types as genai_types
 from livekit.agents import (
@@ -23,16 +24,18 @@ from livekit.agents import (
     CloseEvent,
     ConversationItemAddedEvent,
     JobContext,
+    SpeechCreatedEvent,
     UserInputTranscribedEvent,
-    UserStateChangedEvent,
     cli,
     function_tool,
 )
+from livekit.agents.voice import SpeechHandle
 from livekit.plugins import google
 
 from .agent_config import parse_agent_config
 from .events import EventPublisher
 from .gestures import plan_cues
+from .knowledge import format_passages, search_documents, unique_sources
 from .protocol_models import AgentConfig, Emotion, Gesture
 from .safety import build_instructions
 from .settings import AGENT_NAME, livekit_proxy, load_settings
@@ -50,7 +53,11 @@ EXPRESS_TOOL_ENABLED = os.environ.get("AVATAR_EXPRESS_TOOL") == "1"
 
 class AvatarAgent(Agent):
     def __init__(self, config: AgentConfig, publisher: EventPublisher) -> None:
-        tools = [function_tool(self._express, name="express")] if EXPRESS_TOOL_ENABLED else []
+        tools: list[Any] = [function_tool(self._express, name="express")] if EXPRESS_TOOL_ENABLED else []
+        if config.knowledge:
+            tools.append(function_tool(self._search_knowledge_base, name="search_knowledge_base"))
+        if config.groundingSearch:
+            tools.append(google.tools.GoogleSearch())
         super().__init__(instructions=build_instructions(config, EXPRESS_TOOL_ENABLED), tools=tools)
         self._config = config
         self._pub = publisher
@@ -65,6 +72,20 @@ class AvatarAgent(Agent):
         await self._pub.emotion(Emotion(emotion))
         if gesture != "none":
             await self._pub.gesture(Gesture(gesture))
+
+    async def _search_knowledge_base(self, query: str) -> str:
+        """Search the organisation's documents and return the most relevant passages.
+
+        Args:
+            query: A short search phrase describing what to look up, in the user's language.
+        """
+        passages = await search_documents(
+            load_settings().platform_api_url, list(self._config.knowledge or []), query
+        )
+        log.info("knowledge search %r -> %s passages", query, "failed" if passages is None else len(passages))
+        if passages:
+            await self._pub.sources(unique_sources(passages))
+        return format_passages(passages)
 
 
 def build_model(config: AgentConfig) -> google.realtime.RealtimeModel:
@@ -91,6 +112,13 @@ def build_model(config: AgentConfig) -> google.realtime.RealtimeModel:
             sliding_window=genai_types.SlidingWindow(),
         ),
         session_resumption=genai_types.SessionResumptionConfig(),
+        # Thinking before speaking adds latency to every turn; a conversation rarely needs it.
+        # GEMINI_THINKING_LEVEL: minimal (default) | low | medium | high.
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel(
+                os.environ.get("GEMINI_THINKING_LEVEL", "minimal").upper()
+            ),
+        ),
         # Default (blocking) tool behaviour on purpose: with NON_BLOCKING + SILENT the model treated an
         # `express` call as its whole turn and never spoke. `express` returns instantly, so the pause is
         # negligible.
@@ -113,27 +141,45 @@ server = AgentServer(http_proxy=livekit_proxy(load_settings().livekit_url))
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     config = parse_agent_config(ctx.job.metadata)
-    log.info("starting session room=%s agent=%s", ctx.room.name, config.id)
+    log.info(
+        "starting session room=%s agent=%s voice=%s language=%s audience=%s search=%s documents=%d",
+        ctx.room.name,
+        config.id,
+        config.voice,
+        config.language,
+        config.audience,
+        config.groundingSearch,
+        len(config.knowledge or []),
+    )
 
     await ctx.connect()
     pub = EventPublisher(ctx.room)
     session: AgentSession = AgentSession(llm=build_model(config))
-    agent_state = {"value": "initializing"}
 
-    def fire(coro: object) -> None:
-        asyncio.ensure_future(coro)  # type: ignore[arg-type]
+    # asyncio keeps only weak references to tasks, so hold them until they finish.
+    background: set[asyncio.Future[Any]] = set()
+
+    def fire(coro: Coroutine[Any, Any, Any]) -> None:
+        task = asyncio.ensure_future(coro)
+        background.add(task)
+        task.add_done_callback(background.discard)
+
+    speeches: list[SpeechHandle] = []
+
+    @session.on("speech_created")
+    def _on_speech(ev: SpeechCreatedEvent) -> None:
+        speeches[:] = [h for h in speeches if not h.done()] + [ev.speech_handle]
 
     @session.on("agent_state_changed")
     def _on_agent_state(ev: AgentStateChangedEvent) -> None:
-        agent_state["value"] = ev.new_state
-        fire(pub.state(ev.new_state))
-
-    @session.on("user_state_changed")
-    def _on_user_state(ev: UserStateChangedEvent) -> None:
-        # Barge-in: the user started talking over the agent, so the client must drop queued audio
-        # and close the avatar's mouth immediately.
-        if ev.new_state == "speaking" and agent_state["value"] == "speaking":
+        # Barge-in: the agent stopped because the user talked over it, so the client must drop
+        # queued audio and close the avatar's mouth now. (With Gemini's server-side turn detection,
+        # LiveKit's user_state is not reliable for this; the speech handle's interrupted flag is.)
+        if ev.old_state == "speaking" and any(h.interrupted for h in speeches):
+            log.info("barge-in: agent speech interrupted")
             fire(pub.flush())
+            speeches.clear()
+        fire(pub.state(ev.new_state))
 
     @session.on("user_input_transcribed")
     def _on_user_text(ev: UserInputTranscribedEvent) -> None:

@@ -87,6 +87,8 @@ uv, ruff, mypy, pytest. GitHub Actions: lint → typecheck → test → build �
 
 ## 2. Phase plan
 
+Progress and open tasks for each phase are tracked in [ROADMAP.md](ROADMAP.md).
+
 | Phase | Goal | Size* |
 |---|---|---|
 Two tracks run in parallel and meet at the `AvatarRenderer` interface.
@@ -172,6 +174,25 @@ N0 measurements. The neural track needs GPU access from day one (see Open decisi
 - Interrupting the avatar mid-sentence stops speech in < 200 ms.
 - Measured cost per active minute recorded in the doc.
 
+**Status (12 Nov 2026, MacBook M4, Gemini free tier, `gemini-3.1-flash-live-preview`)**
+
+Measured with `make eval` (`evals/latency.py`): a scripted user joins a real session, speaks with
+macOS text-to-speech, types, and talks over the agent. Five voice turns per run, several runs.
+
+| Criterion | Result | Status |
+|---|---|---|
+| Voice-to-voice p50 ≤ 1.0 s | **1.12 s** p50 (0.95–1.27 s per turn). About 0.5 s is the deliberate end-of-turn silence wait (`TURN_SILENCE_MS=500`); the rest is Gemini's time to first audio. Thinking level `minimal` saved ~0.2 s; dropping the silence wait to 350 ms saved only ~0.09 s and risks cutting users off, so it stays at 500 ms. | Close, not met |
+| Interruption stops speech < 200 ms | Agent audio stops **0.04 s** after the interruption is detected (`agent.flush`); detection itself takes ~0.46 s of the user talking (Gemini's server-side speech detection). | Met |
+| A/V offset ≤ 37 ms | ~29 ms lips-vs-sound on the playground HUD (lip-sync test with synthesized vowels) | Met |
+| ≥ 60 fps on an M-series laptop | 0.42 ms per frame (`__avatar.benchmark()`), so the display rate is the limit | Met |
+| ≥ 30 fps p5 on a mid-range Android | Not measured (no reference device yet) | Open |
+| 20-minute conversation without visible reconnect | Not run yet. Context compression and session resumption are on. | Open |
+| Cost per active minute | $0 on the free tier: LiveKit is self-hosted and the 3D avatar renders on the viewer's device. Gemini's paid per-minute price to be recorded when we move off the free tier. | Recorded (free tier) |
+
+Also done in Phase 1: the `AvatarRenderer` interface (`packages/avatar-runtime/src/renderer/`) with
+`ThreeRenderer` as the first implementation; text chat in the playground, which also works when the
+microphone is blocked; and the "AI" badge on the stage.
+
 ---
 
 ## Phase 2 — Persona Studio (options from the brief)
@@ -198,6 +219,22 @@ N0 measurements. The neural track needs GPU access from day one (see Open decisi
 
 **Done when**: a non-engineer creates two distinct personas (different name, voice, avatar, KB) in
 Studio and both work in the playground with grounded, cited answers.
+
+
+**Status (13 Nov 2026): knowledge base added; memory, accounts and custom voices left**
+
+| Item | State |
+|---|---|
+| Studio shell | Done. Every roadmap feature has a place in the navigation (Build, Test, Connect, Operate, Settings); unbuilt ones show what's coming and in which phase. |
+| 2. Agents with versions | Done. Draft autosaves; Publish creates numbered versions; roll back by copying a version into the draft. Store is a JSON file under `data/` behind `AgentStore`, ready to swap for Postgres. |
+| 3. Names and personality | Done. Name, role, greeting, language, instructions, and four tone sliders the worker turns into instructions. Five starting templates (blank, tutor, support, meeting host, game character). |
+| 4. Voices | Prebuilt done: all 30 Gemini voices with samples (`make voices`). Custom and cloned voices not started. |
+| 5. Appearance | Done for 3D: built-in character plus uploaded VRM library, and camera framing. Image-to-avatar waits for Phase 4. |
+| 6. Grounding | Done: Google Search toggle per agent. Citations in captions not yet. |
+| Live test | Done. The editor's stage talks to the draft; editing mid-call offers a restart. |
+| 1. Auth, orgs, RBAC | Not started. |
+| 7. Knowledge base | Done for the laptop profile. Documents (PDF, Word, text, Markdown, HTML, web pages, pasted text) are split into passages of about 900 characters and embedded with `gemini-embedding-001`; search merges a ranking by meaning with a ranking by shared words, and falls back to words alone when embeddings are unavailable. The worker's `search_knowledge_base` tool returns passages with their document, the stage shows the document name under the captions, and Studio has a library, a per-agent picker and a test console. Differences from the plan: the index is files under `data/knowledge/` behind `KnowledgeStore` rather than pgvector, and ingestion runs inside the API rather than a separate `services/ingest`. Both move when the stores go to Postgres. |
+| 8. Memory | Not started. |
 
 ---
 
