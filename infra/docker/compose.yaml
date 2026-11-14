@@ -1,12 +1,12 @@
 # Local stack. LiveKit runs in --dev mode (keys devkey/secret), never expose it publicly.
 #
-#   make start    LiveKit here; API, worker and Studio as local processes (fast edit-reload loop)
-#   make docker   everything in containers: LiveKit, API, worker, Studio  (profile "app")
+#   make start    LiveKit and Postgres here; API, worker and Studio as local processes
+#   make docker   everything in containers: LiveKit, Postgres, API, worker, Studio  (profile "app")
 #
-# Where the data is: agents, documents and memory are files under ./data, and avatar models are
-# under ./assets/avatars. Both folders are mounted into the API container, so the two ways of
-# running share the same data. Postgres, Redis and MinIO (profile "full") are here for the move
-# to a database; nothing reads or writes them yet.
+# Where the data is: accounts, agents, documents and memory are in Postgres (its files are under
+# infra/docker/data/postgres). Avatar models are files under ./assets/avatars. Both ways of running
+# use the same database and the same avatar folder, so they share the same data.
+# Redis and MinIO (profile "full") are placeholders for later phases; nothing uses them yet.
 name: metaavatar
 services:
   livekit:
@@ -26,6 +26,24 @@ services:
           node_ip: 127.0.0.1
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Development credentials. The port is published on this machine only; change both the
+      # password and DATABASE_URL before running this anywhere else.
+      POSTGRES_USER: metaavatar
+      POSTGRES_PASSWORD: metaavatar
+      POSTGRES_DB: metaavatar
+    # 5433 on this machine, so it doesn't clash with a Postgres you may already run on 5432.
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["./data/postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metaavatar -d metaavatar"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   api:
     build: { context: ../.., dockerfile: infra/docker/api.Dockerfile }
     profiles: ["app"]
@@ -39,6 +57,9 @@ services:
       STUDIO_ORIGIN: http://localhost:3100
       DATA_DIR: /app/data
       AVATAR_DIR: /app/assets/avatars
+      DATABASE_URL: postgres://metaavatar:metaavatar@postgres:5432/metaavatar
+    depends_on:
+      postgres: { condition: service_healthy }
     ports: ["127.0.0.1:8787:8787"]
     volumes:
       - ../../data:/app/data
@@ -70,16 +91,6 @@ services:
     depends_on:
       api: { condition: service_healthy }
     restart: unless-stopped
-
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_USER: metaavatar
-      POSTGRES_PASSWORD: metaavatar
-      POSTGRES_DB: metaavatar
-    ports: ["127.0.0.1:5432:5432"]
-    volumes: ["./data/postgres:/var/lib/postgresql/data"]
-    profiles: ["full"]
 
   redis:
     image: redis:7-alpine
