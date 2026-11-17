@@ -38,7 +38,7 @@ with free tiers: no paid services, at most $20 a month.
 | Path | What it is |
 |---|---|
 | `apps/studio` | Studio, Next.js 16 + React 19. **Read `apps/studio/AGENTS.md` first: this Next.js has breaking changes; check `node_modules/next/dist/docs/` before using an API from memory.** |
-| `services/api` | Platform API, Hono on Node, run with `tsx`. Routes in `src/app.ts`; stores in `src/store.ts`, `src/accounts.ts`, `src/memory.ts`, `src/knowledge/`, `src/integrations.ts`; `src/db.ts` and `src/boot.ts` connect them to Postgres. |
+| `services/api` | Platform API, Hono on Node, run with `tsx`. Routes in `src/app.ts`; stores in `src/store.ts`, `src/accounts.ts`, `src/memory.ts`, `src/knowledge/`, `src/integrations.ts`, `src/forge.ts`; `src/db.ts` and `src/boot.ts` connect them to Postgres. |
 | `services/agent-worker` | Python worker (uv, LiveKit Agents + Gemini Live). One job per conversation. |
 | `packages/protocol` | Zod schemas shared by everything. The Python models are generated from it. |
 | `packages/avatar-runtime` | Browser runtime: three.js, VRM, lip-sync, gestures, LiveKit client. |
@@ -97,7 +97,7 @@ Studio is at http://localhost:3100, the API at http://localhost:8787.
 - View state that should survive a reload uses `usePersisted` (`lib/usePersisted.ts`).
 - Python: ruff decides formatting (`make fmt`). Type hints everywhere. Tool functions return a
   sentence the model can act on, including when something failed.
-- Stores (`AgentStore`, `MemoryStore`, `KnowledgeStore`, `AccountStore`, `IntegrationsStore`) are the only code that
+- Stores (`AgentStore`, `MemoryStore`, `KnowledgeStore`, `AccountStore`, `IntegrationsStore`, `ForgeStore`) are the only code that
   touches saved data. Routes call store methods; they never read files or SQL themselves.
 
 ## Things that have already gone wrong (do not repeat them)
@@ -121,6 +121,79 @@ Studio is at http://localhost:3100, the API at http://localhost:8787.
 - **Zod `.min(1)` on array items** makes the Python generator emit an awkward wrapper type. Avoid it.
 - **In Docker the worker shares LiveKit's network** (`network_mode: service:livekit`) because LiveKit
   tells peers to send media to 127.0.0.1. Do not "simplify" this.
+- **Vision silently did nothing** until `livekit-agents[images]` was installed: frames failed to
+  encode in a background task and the model answered "the picture is black". When adding a worker
+  capability, read `.run/worker.log` for errors after a live test, not only the conversation.
+- **Two extra buttons squeezed the stage's message box to 5 pixels** and a click meant for it hit
+  End. After changing a row of controls, measure it in the browser at panel width.
+- **`mcp` 2.x renamed `FastMCP`** (now `mcp.server.mcpserver.MCPServer`) and LiveKit deprecated
+  `Agent(mcp_servers=...)`; connectors are attached as `mcp.MCPToolset`. Check the installed
+  library before using an API from memory.
+- **The model asked for permission out loud as well as on screen** until the tool description said
+  not to. Wording in tool descriptions changes behaviour; test it live.
+- **zsh does not split a command held in a variable**: scripts that build commands need bash arrays
+  (`bash -c '...'`, `C=(docker compose -f ...)`, `"${C[@]}"`).
+- **Deleting rows straight from Postgres needs an API restart**: the stores read the tables once.
+- **`img.decode()` never settles while the tab is in the background**; decode files with
+  `createImageBitmap` (Forge upload).
+- **`gemini-flash-latest` hung for over a minute** on a picture; `gemini-flash-lite-latest` answers in
+  about two seconds. Before choosing a Gemini model, time it with the project's key; a 404 means the
+  name is wrong for this key.
+- **Pictures of faces must never be committed**: `assets/avatars/*.portrait.*` is git-ignored. Keep it.
+- **Python string splicing broke a file**: replacing "from the first `main()`" hit the vertex
+  shader's `main` and duplicated the fragment shader; the dev server failed while `tsc` alone looked
+  fine at first. After scripted edits, run `tsc` and load the page.
+- **Pressing End mid-sentence threw an uncaught error** from the caption stream; the loop in
+  `session.ts` now catches it. Any `for await` over a LiveKit stream needs a try/catch.
+
+## Testing playbook (how the last features were verified; repeat it)
+
+Unit tests are necessary and not enough: most bugs found so far only showed up in the running app.
+For any user-visible change, do all of this.
+
+1. **Start the local stack** with `make start` (if `make docker` is running, `make docker-stop`
+   first). `make status` shows what is up. After the laptop restarts, everything is down, the
+   scratchpad folder is empty and the test browser has lost its sign-in.
+2. **Use a throwaway account, never the owner's.** Create a member with a temporary script under
+   `services/api/` (delete it afterwards):
+   ```ts
+   // services/api/qa-user.mts. Run: npx tsx qa-user.mts   (or: npx tsx qa-user.mts remove)
+   import { AccountStore } from "./src/accounts";
+   import { PostgresDatabase } from "./src/db";
+   import { OWNER } from "./src/testing";
+   const db = await PostgresDatabase.open("postgres://metaavatar:metaavatar@localhost:5433/metaavatar", 3);
+   const accounts = new AccountStore(null);
+   await accounts.attach(db, false);
+   const existing = accounts.users().find((u) => u.email === "qa-temp@example.com");
+   if (process.argv[2] === "remove") { if (existing) accounts.removeUser(existing.id); }
+   else if (!existing) await accounts.createUser("qa-temp@example.com", "QA Check", OWNER.password, "member");
+   await db.settled();
+   await db.close();
+   ```
+   Then `make restart s=api` (stores read the tables once) and sign in as `qa-temp@example.com`
+   with the password in `services/api/src/testing.ts`.
+3. **Make test data through the API or Studio, as that member**, with names that say what they are
+   ("Forge QA", "Phase3 QA"). Never edit the owner's agents; create your own.
+4. **Drive the real flow in the browser** and read the console for errors after each step. Then
+   look at the result: take screenshots, and for avatar work capture the canvas
+   (`canvas.toDataURL()`) and view it. Several bugs were only visible in a picture.
+5. **For live conversations** (they use Gemini quota; the owner has asked for features to be fully
+   tested), start one from the stage, type messages, and read `.run/worker.log` afterwards for
+   warnings and errors. "received server content but no active generation" is a known harmless
+   warning.
+6. **Check phone width** (375 px): no sideways scrolling, controls not squeezed.
+7. **Clean up**: delete your agents, tools, connectors, embed keys and any avatar files you made
+   through the API; remove test rows you can't reach through the API (then `make restart s=api`);
+   remove the member; delete the temporary script; stop helper processes.
+8. **Run `make check`**, and for API storage changes also
+   `TEST_DATABASE_URL=postgres://metaavatar:metaavatar@localhost:5433/metaavatar pnpm --filter @metaavatar/api test`.
+9. **Rebuild Docker** (`make stop && make docker`) and check the containers are healthy, protected
+   routes answer 401 signed out, and new dependencies are in the images.
+
+**Limits of the test browser:** it blocks the microphone, the camera and screen capture, and runs
+animation frames only about once a second, so motion can't be judged there. Test those by other
+means (a synthetic video feed with `livekit.rtc`, rendering single frames on purpose) and say
+plainly what you could not check.
 
 ## Before you say "done"
 
@@ -136,54 +209,43 @@ Studio is at http://localhost:3100, the API at http://localhost:8787.
 See `docs/ROADMAP.md` for the full picture. The section below is kept current by whoever worked last.
 
 <!-- STATUS:START -->
-Last updated 14 November 2026. `make check` passes: 40 API tests, 15 runtime, 5 SDK, 20 worker.
+Last updated 17 November 2026. `make check` passes: 53 API tests (plus 2 against real Postgres),
+22 runtime, 5 SDK, 3 protocol, 20 worker. Nothing is committed: the owner commits.
 
-**Built and verified (uncommitted until the owner commits):**
+**Built and verified:**
 
-- Phases 0 to 2: core loop, Studio, knowledge base, memory, versions, Docker.
-- **Accounts and sign-in** (`services/api/src/accounts.ts`, Studio `/signin`, `components/Auth.tsx`).
-  First account is the owner; the owner adds people in Settings. HttpOnly cookie sessions, scrypt.
-- **API protection** ("Who is asking" in `services/api/src/app.ts`): cookie, API key
-  (`Authorization: Bearer mak_...`), or the worker's service token (derived from
-  `LIVEKIT_API_SECRET` on both sides: `deriveServiceToken` in `app.ts`, `derive_service_token` in
-  `platform_api.py`; a test on each side pins the same value). Public routes are listed in
-  `isPublic()`. A new route is protected by default; add it to `isPublic()` or `serviceMay()` only
-  on purpose, with a test.
-- **Postgres** (`db.ts`, `boot.ts`): one table per store (id, JSON, updated_at); stores keep an
-  in-memory copy and write through; `DATABASE_URL=off` uses files. A new store needs: its
-  collection names in `COLLECTIONS`, an `attach()` method, and a line in `boot.ts`.
-- **Phase 3, all but the meeting bot** (see "Phase 3" in `docs/ROADMAP.md` for what was verified):
-  - Tools, connectors, webhooks, activity log: `services/api/src/integrations.ts`,
-    worker `tools.py` and `platform_api.py`, Studio `/tools` and the agent's Tools tab.
-  - Built-in actions `show_card`, `handoff_to_human`, `end_session` in `main.py`.
-  - On-screen permission: `ConfirmEvent` to the browser, `ClientEvent` back on topic
-    `avatar.v1.client`; `Confirmations` in `tools.py`.
-  - Vision: `AgentConfig.vision`, `room_io.RoomOptions(video_input=...)`, runtime `setCamera` /
-    `setScreenShare`, `face.ts`.
-  - Embeds: keys `pk_...`, public page `/e/<key>`, `public/widget.js`, visitor tokens, `packages/sdk`.
+- Phases 0 to 2: core loop, Studio, knowledge base, memory, versions, Docker, accounts and sign-in,
+  API protection, Postgres.
+- Phase 3, all but the meeting bot: tools, connectors (MCP), on-screen permission, built-in actions,
+  vision, embeds and widget, webhooks, visitor tokens, SDK.
+- **Phase 4, portrait path (Avatar Forge)**, verified end to end in the browser and with a live
+  conversation (see "Phase 4" in `docs/ROADMAP.md`):
+  - Protocol: `PortraitRig`, `checkPortraitRig`, `AvatarRef` kind `portrait`, Forge job types.
+  - Runtime: `avatar/portrait.ts` (shader), `ThreeRenderer.selfCheck()`, `previewSpeech()`.
+  - API: `forge.ts` (`ForgeStore`, `GeminiScanner`, `judge`, `readPicture`), `/forge` routes in
+    `app.ts`, portraits in the avatar library and on signed embed links.
+  - Studio: `app/(studio)/forge/`, portraits in `AvatarPicker`.
+  - Settings: `FORGE_SCAN=off`, `FORGE_SCAN_MODEL` (see `.env.example`).
+
+**How the main pieces connect, for orientation:**
+
+- An avatar is an `AvatarRef` (`vrm`, `procedural` or `portrait`). Each kind is an `AvatarModel` in
+  `packages/avatar-runtime/src/avatar/`; `ThreeRenderer.setAvatar` picks the class. A new kind of
+  avatar goes there and nowhere else above it.
+- Who may call a route is decided in one place: "Who is asking" in `services/api/src/app.ts`
+  (`isPublic`, `serviceMay`, `ownerOnly`). New routes are protected by default.
+- The worker never holds secrets or outside addresses: tool calls, hand-offs and session settings
+  go through `/internal/*` with the service token.
 
 **Open, in this order (do not start any without the owner asking):**
 
-1. Check camera and screen sharing by hand in Chrome (the builder's test browser blocks capture).
+1. Check camera and screen sharing, and the Forge's face finder, by hand in Chrome (the test
+   browser blocks capture and has no face detector).
 2. Web search and its citations need a live test with a key that has quota.
-3. Meeting bot (the only Phase 3 item left): terms of Meet, Zoom and Teams need checking first.
-4. Phase 4 onwards, as in the roadmap.
-
-**More things that went wrong, from this stretch:**
-
-- **Vision silently did nothing** until `livekit-agents[images]` was installed: frames failed to
-  encode in a background task and the model answered "the picture is black". When adding a worker
-  capability, read `.run/worker.log` for errors after a live test, not only the conversation.
-- **Two extra buttons squeezed the stage's message box to 5 pixels** and a click meant for it hit
-  End. After changing a row of controls, measure it in the browser at panel width.
-- **`mcp` 2.x renamed `FastMCP`** and LiveKit deprecated `Agent(mcp_servers=...)`; connectors are
-  attached as `mcp.MCPToolset`. Check the installed library before using an API from memory.
-- **The model asked for permission out loud as well as on screen** until the tool description said
-  not to. Wording in tool descriptions changes behaviour; test it live.
-- **zsh does not split unquoted variables**: scripts that build curl commands need bash arrays.
-- **Deleting rows straight from Postgres needs an API restart**: the stores read tables once.
+3. Phase 5 safety work before any outside user, including CSAM hash matching for the Forge.
+4. Phase 4's 3D path (a GPU budget and a model bake-off first), the LAM spike, the meeting bot.
 
 **Known gaps:** no password reset by email; sign-in rate limit is in memory; one API process per
-database; embed "allowed websites" is enforced through the browser; visitors without a visitor
-token are identified only by a random id their browser keeps.
+database; embed "allowed websites" is enforced through the browser; portraits are head and
+shoulders only and turn only a little; the Forge's public-figure check is a confirmation, not a check.
 <!-- STATUS:END -->
