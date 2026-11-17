@@ -14,6 +14,8 @@ __pycache__/
 .DS_Store
 infra/docker/data/
 assets/avatars/*.vrm
+# Portraits made in the Avatar Forge are pictures of people's faces: never committed.
+assets/avatars/*.portrait.*
 !assets/avatars/README.md
 .run/
 evals/results/
