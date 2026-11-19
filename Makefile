@@ -17,7 +17,7 @@ UV_RUN      := cd $(WORKER_DIR) && PYTHONWARNINGS=ignore::SyntaxWarning uv run
 ##@ Everyday
 
 .PHONY: start
-start: ## Start everything (Docker, API, agent worker, Studio) in the background
+start: ## Start everything (LiveKit and Postgres in Docker; API, agent worker, Studio) in the background
 	@$(RUN) start
 
 .PHONY: stop
@@ -33,7 +33,7 @@ status: ## Show what's running and whether setup looks right
 	@$(RUN) status
 
 .PHONY: logs
-logs: ## Follow logs. One service: make logs s=worker (api|worker|studio|livekit)
+logs: ## Follow logs. One service: make logs s=worker (api|worker|studio|livekit|postgres)
 	@$(RUN) logs $(s)
 
 .PHONY: open
@@ -46,7 +46,7 @@ open: ## Open the playground in your browser
 COMPOSE := docker compose -f $(ROOT)/infra/docker/compose.yaml
 
 .PHONY: docker
-docker: ## Build and start LiveKit, API, worker and Studio in Docker (stop `make start` first)
+docker: ## Build and start LiveKit, Postgres, API, worker and Studio in Docker (stop `make start` first)
 	@if lsof -ti tcp:8787,3100 -sTCP:LISTEN >/dev/null 2>&1 && ! $(COMPOSE) --profile app ps -q api >/dev/null 2>&1; then \
 		echo "Ports 8787/3100 are in use by the local stack. Run 'make stop' first."; exit 1; fi
 	@test -f $(ROOT)/.env || { echo "No .env yet. Run 'make start' once, or copy .env.example to .env and add your key."; exit 1; }
@@ -55,7 +55,7 @@ docker: ## Build and start LiveKit, API, worker and Studio in Docker (stop `make
 	@echo "Studio: http://localhost:3100   API: http://localhost:8787   (make docker-logs to watch)"
 
 .PHONY: docker-stop
-docker-stop: ## Stop and remove the containers (data in ./data and ./assets/avatars is kept)
+docker-stop: ## Stop and remove the containers (the database and ./assets/avatars are kept)
 	$(COMPOSE) --profile app --profile full down
 
 .PHONY: docker-logs
@@ -86,6 +86,10 @@ install: hooks ## Reinstall dependencies and rebuild the protocol package
 .PHONY: hooks
 hooks: ## Turn on the git pre-commit hook (lint + typecheck before each commit)
 	@git config core.hooksPath .githooks && echo "Pre-commit hook on (.githooks/pre-commit)"
+
+.PHONY: db
+db: ## Open a SQL prompt on the database (needs make start or make docker)
+	@$(COMPOSE) exec postgres psql -U metaavatar -d metaavatar
 
 .PHONY: voices
 voices: ## Generate the voice sample clips Studio plays (once; ARGS=--force to redo)
@@ -140,9 +144,9 @@ clean: _not-running ## Remove build output, caches and logs (keeps dependencies 
 	@echo "Clean. Next 'make start' rebuilds what it needs."
 
 .PHONY: reset
-reset: stop clean ## Clean, plus remove node_modules, the Python venv and container data; keeps .env
+reset: stop clean ## Clean, plus remove node_modules and the Python venv; keeps .env and your data
 	rm -rf node_modules apps/*/node_modules packages/*/node_modules services/api/node_modules
-	rm -rf $(WORKER_DIR)/.venv infra/docker/data
+	rm -rf $(WORKER_DIR)/.venv
 	@echo "Reset. Next 'make start' reinstalls everything."
 
 .PHONY: _not-running
